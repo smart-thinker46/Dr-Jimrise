@@ -118,7 +118,7 @@ function SiteContentEditor<T extends Record<string, unknown>>({
   useEffect(() => { if (data) setForm(data as Record<string, unknown>); }, [data]);
 
   const save = async () => {
-    const { error } = await supabase.from("site_content").upsert({ key: sectionKey, value: form });
+    const { error } = await supabase.from("site_content").upsert({ key: sectionKey, value: form as never });
     if (error) return toast.error(error.message);
     toast.success("Saved");
     qc.invalidateQueries({ queryKey: ["site_content", sectionKey] });
