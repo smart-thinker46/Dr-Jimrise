@@ -1,12 +1,19 @@
 import { useEffect, useState } from "react";
-import { Link } from "@tanstack/react-router";
-import { Menu, X } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { Menu, X, LogIn, LayoutDashboard, LogOut } from "lucide-react";
 import { navLinks } from "@/lib/site-data";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { useAuth, useUserRole } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { data: role } = useUserRole(user);
+  const dashTo = role === "admin" ? "/admin" : "/student";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -14,6 +21,8 @@ export function Navbar() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  const signOut = async () => { await supabase.auth.signOut(); navigate({ to: "/" }); };
 
   return (
     <header
@@ -40,13 +49,23 @@ export function Navbar() {
               </Link>
             </li>
           ))}
+          <li className="ml-3 flex items-center gap-2">
+            {user ? (
+              <>
+                <Button asChild size="sm" variant="outline" className="border-cream/30 text-cream bg-transparent hover:bg-cream/10 hover:text-cream">
+                  <Link to={dashTo}><LayoutDashboard size={14} className="mr-1.5" />Dashboard</Link>
+                </Button>
+                <Button size="sm" variant="ghost" onClick={signOut} className="text-cream/85 hover:bg-cream/10 hover:text-cream"><LogOut size={14} /></Button>
+              </>
+            ) : (
+              <Button asChild size="sm" className="bg-gold text-navy-deep hover:bg-gold-soft font-semibold">
+                <Link to="/auth"><LogIn size={14} className="mr-1.5" />Login</Link>
+              </Button>
+            )}
+          </li>
         </ul>
 
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="lg:hidden text-cream p-2 -mr-2"
-          aria-label="Toggle menu"
-        >
+        <button onClick={() => setOpen((v) => !v)} className="lg:hidden text-cream p-2 -mr-2" aria-label="Toggle menu">
           {open ? <X size={22} /> : <Menu size={22} />}
         </button>
       </nav>
@@ -56,15 +75,19 @@ export function Navbar() {
           <ul className="px-4 py-3 space-y-1">
             {navLinks.map((l) => (
               <li key={l.to}>
-                <Link
-                  to={l.to}
-                  onClick={() => setOpen(false)}
-                  className="block px-3 py-2 text-sm text-cream/85 hover:text-gold hover:bg-cream/5 rounded-md"
-                >
-                  {l.label}
-                </Link>
+                <Link to={l.to} onClick={() => setOpen(false)} className="block px-3 py-2 text-sm text-cream/85 hover:text-gold hover:bg-cream/5 rounded-md">{l.label}</Link>
               </li>
             ))}
+            <li className="pt-2 border-t border-cream/10 mt-2">
+              {user ? (
+                <>
+                  <Link to={dashTo} onClick={() => setOpen(false)} className="block px-3 py-2 text-sm text-gold">Dashboard</Link>
+                  <button onClick={() => { setOpen(false); signOut(); }} className="block w-full text-left px-3 py-2 text-sm text-cream/85">Sign out</button>
+                </>
+              ) : (
+                <Link to="/auth" onClick={() => setOpen(false)} className="block px-3 py-2 text-sm text-gold font-semibold">Login / Sign up</Link>
+              )}
+            </li>
           </ul>
         </div>
       )}

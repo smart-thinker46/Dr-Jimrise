@@ -20,8 +20,10 @@ export const Route = createFileRoute("/resources")({
 
 function ResourcesPage() {
   const [filter, setFilter] = useState<string>("All");
-  const { data: announcements } = useAnnouncements();
-  const { data: resources } = useResources();
+  const { data: announcementsData } = useAnnouncements();
+  const { data: resourcesData } = useResources();
+  const announcements = announcementsData ?? [];
+  const resources = resourcesData ?? [];
 
   const courseFilters = ["All", ...Array.from(new Set(resources.map((r) => r.course)))];
   const filtered = filter === "All" ? resources : resources.filter((r) => r.course === filter);
