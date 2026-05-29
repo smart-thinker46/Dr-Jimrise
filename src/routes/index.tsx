@@ -345,7 +345,9 @@ function Index() {
                     <li key={i} className="group">
                       <p className="font-semibold text-navy-deep">{s.name}</p>
                       <p className="text-sm text-foreground/75 leading-snug mt-0.5">{s.title}</p>
-                      {"meta" in s && s.meta && <p className="text-xs text-muted-foreground mt-1">{s.meta}</p>}
+                      {"meta" in s && typeof s.meta === "string" && s.meta && (
+                        <p className="text-xs text-muted-foreground mt-1">{s.meta}</p>
+                      )}
                     </li>
                   ))}
                 </ul>
