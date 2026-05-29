@@ -25,7 +25,7 @@ export type ContactContent = {
 };
 
 export function useSiteContent<T>(key: string, fallback: T) {
-  return useQuery({
+  const q = useQuery({
     queryKey: ["site_content", key],
     queryFn: async () => {
       const { data } = await supabase.from("site_content").select("value").eq("key", key).maybeSingle();
@@ -33,6 +33,7 @@ export function useSiteContent<T>(key: string, fallback: T) {
     },
     initialData: fallback,
   });
+  return { ...q, data: (q.data ?? fallback) as T };
 }
 
 export function useAnnouncements() {
