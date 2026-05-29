@@ -18,8 +18,10 @@ export const Route = createFileRoute("/research")({
 });
 
 function ResearchPage() {
-  const { data: journals } = usePublications("journal");
-  const { data: conferences } = usePublications("conference");
+  const { data: journalsData } = usePublications("journal");
+  const { data: conferencesData } = usePublications("conference");
+  const journals = journalsData ?? [];
+  const conferences = conferencesData ?? [];
 
   return (
     <Layout plain>

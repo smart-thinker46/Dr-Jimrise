@@ -14,9 +14,9 @@ export const Route = createFileRoute("/supervision")({
 });
 
 function SupPage() {
-  const phd = useSupervision("phd").data;
-  const mscC = useSupervision("msc_completed").data;
-  const mscO = useSupervision("msc_ongoing").data;
+  const phd = useSupervision("phd").data ?? [];
+  const mscC = useSupervision("msc_completed").data ?? [];
+  const mscO = useSupervision("msc_ongoing").data ?? [];
 
   const cols = [
     { label: "PhD — Ongoing", icon: GraduationCap, students: phd },
