@@ -1,29 +1,40 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Layout, PageHeader } from "@/components/Layout";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, Upload, Save, Plus, ShieldCheck } from "lucide-react";
+import {
+  Trash2, Save, Plus, ShieldCheck, User, Info, Mail, Megaphone, FolderOpen, BookOpen, Users,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useUserRole } from "@/hooks/use-auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { heroFallback, aboutFallback, contactFallback, type HeroContent, type AboutContent, type ContactContent } from "@/lib/content";
+import { DashboardShell, type DashboardNavItem } from "@/components/DashboardShell";
+import { heroFallback, aboutFallback, contactFallback } from "@/lib/content";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Admin Dashboard" }] }),
   component: AdminPage,
 });
 
+const NAV: DashboardNavItem[] = [
+  { id: "hero", label: "Hero", icon: User },
+  { id: "about", label: "About", icon: Info },
+  { id: "contact", label: "Contact", icon: Mail },
+  { id: "announcements", label: "Announcements", icon: Megaphone },
+  { id: "resources", label: "Resources", icon: FolderOpen },
+  { id: "publications", label: "Publications", icon: BookOpen },
+  { id: "supervision", label: "Supervision", icon: Users },
+];
+
 function AdminPage() {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const { data: role, isLoading: roleLoading, refetch } = useUserRole(user);
+  const [active, setActive] = useState("hero");
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -32,70 +43,66 @@ function AdminPage() {
   if (loading || !user) return null;
 
   if (roleLoading) {
-    return <Layout plain><div className="py-20 text-center text-muted-foreground">Checking permissions…</div></Layout>;
+    return <div className="py-20 text-center text-muted-foreground">Checking permissions…</div>;
   }
 
   if (role !== "admin") {
     return (
-      <Layout plain>
-        <PageHeader eyebrow="Restricted" title="Admin access required" />
-        <section className="py-16 bg-secondary/30">
-          <div className="mx-auto max-w-md px-4 space-y-4">
-            <Card><CardContent className="pt-6 space-y-4 text-sm">
-              <p>You are signed in as <strong>{user.email}</strong> but don't have admin privileges.</p>
-              <p className="text-muted-foreground">If no admin has been set up yet, you can claim the role (this only works for the very first admin).</p>
-              <Button className="w-full bg-gold text-navy-deep hover:bg-gold-soft" onClick={async () => {
-                const { data, error } = await supabase.rpc("bootstrap_admin");
-                if (error) toast.error(error.message);
-                else if (data) { toast.success("You are now admin!"); refetch(); }
-                else toast.error("An admin already exists.");
-              }}><ShieldCheck size={16} className="mr-2" /> Claim admin role</Button>
-              <Button variant="outline" className="w-full" asChild><Link to="/student">Go to student dashboard</Link></Button>
-            </CardContent></Card>
-          </div>
-        </section>
-      </Layout>
+      <div className="min-h-screen bg-secondary/30 flex items-center justify-center px-4">
+        <Card className="max-w-md w-full">
+          <CardContent className="pt-6 space-y-4 text-sm">
+            <h2 className="font-serif text-xl font-bold text-navy-deep">Admin access required</h2>
+            <p>You are signed in as <strong>{user.email}</strong> but don't have admin privileges.</p>
+            <p className="text-muted-foreground">If no admin has been set up yet, you can claim the role (this only works for the very first admin).</p>
+            <Button className="w-full bg-gold text-navy-deep hover:bg-gold-soft" onClick={async () => {
+              const { data, error } = await supabase.rpc("bootstrap_admin");
+              if (error) toast.error(error.message);
+              else if (data) { toast.success("You are now admin!"); refetch(); }
+              else toast.error("An admin already exists.");
+            }}><ShieldCheck size={16} className="mr-2" /> Claim admin role</Button>
+            <Button variant="outline" className="w-full" asChild><Link to="/student">Go to student dashboard</Link></Button>
+            <Button variant="ghost" className="w-full" asChild><Link to="/">Back to site</Link></Button>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
+  const activeMeta = NAV.find((n) => n.id === active);
+
   return (
-    <Layout plain>
-      <PageHeader eyebrow="Admin" title="Site Dashboard" subtitle="Manage hero, about, contact, announcements, resources, publications, and supervision." />
-      <section className="py-10 bg-secondary/30">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-end mb-4 gap-2">
-            <Button variant="outline" onClick={async () => { await supabase.auth.signOut(); navigate({ to: "/" }); }}>Sign out</Button>
-          </div>
-          <Tabs defaultValue="hero">
-            <TabsList className="flex-wrap h-auto">
-              <TabsTrigger value="hero">Hero</TabsTrigger>
-              <TabsTrigger value="about">About</TabsTrigger>
-              <TabsTrigger value="contact">Contact</TabsTrigger>
-              <TabsTrigger value="announcements">Announcements</TabsTrigger>
-              <TabsTrigger value="resources">Resources</TabsTrigger>
-              <TabsTrigger value="publications">Publications</TabsTrigger>
-              <TabsTrigger value="supervision">Supervision</TabsTrigger>
-            </TabsList>
-            <TabsContent value="hero"><SiteContentEditor sectionKey="hero" fallback={heroFallback} fields={[
-              { name: "name", label: "Name" }, { name: "tagline", label: "Tagline" }, { name: "role", label: "Role" },
-              { name: "institution", label: "Institution" }, { name: "quote", label: "Quote", textarea: true },
-            ]} imageField="photo_url" imageBucket="public-assets" /></TabsContent>
-            <TabsContent value="about"><SiteContentEditor sectionKey="about" fallback={aboutFallback} fields={[
-              { name: "bio", label: "Biography", textarea: true, rows: 8 },
-            ]} imageField="photo_url" imageBucket="public-assets" /></TabsContent>
-            <TabsContent value="contact"><SiteContentEditor sectionKey="contact" fallback={contactFallback} fields={[
-              { name: "email", label: "Email" }, { name: "institution_line1", label: "Institution Line 1" },
-              { name: "institution_line2", label: "Institution Line 2" }, { name: "linkedin", label: "LinkedIn URL" },
-              { name: "scholar", label: "Google Scholar URL" }, { name: "researchgate", label: "ResearchGate URL" },
-            ]} /></TabsContent>
-            <TabsContent value="announcements"><AnnouncementsAdmin /></TabsContent>
-            <TabsContent value="resources"><ResourcesAdmin /></TabsContent>
-            <TabsContent value="publications"><PublicationsAdmin /></TabsContent>
-            <TabsContent value="supervision"><SupervisionAdmin /></TabsContent>
-          </Tabs>
-        </div>
-      </section>
-    </Layout>
+    <DashboardShell
+      roleLabel="Admin"
+      title={activeMeta?.label ?? "Dashboard"}
+      subtitle="Manage site content, announcements, resources, publications & supervision"
+      userEmail={user.email ?? undefined}
+      nav={NAV}
+      active={active}
+      onSelect={setActive}
+    >
+      {active === "hero" && (
+        <SiteContentEditor sectionKey="hero" fallback={heroFallback} fields={[
+          { name: "name", label: "Name" }, { name: "tagline", label: "Tagline" }, { name: "role", label: "Role" },
+          { name: "institution", label: "Institution" }, { name: "quote", label: "Quote", textarea: true },
+        ]} imageField="photo_url" imageBucket="public-assets" />
+      )}
+      {active === "about" && (
+        <SiteContentEditor sectionKey="about" fallback={aboutFallback} fields={[
+          { name: "bio", label: "Biography", textarea: true, rows: 8 },
+        ]} imageField="photo_url" imageBucket="public-assets" />
+      )}
+      {active === "contact" && (
+        <SiteContentEditor sectionKey="contact" fallback={contactFallback} fields={[
+          { name: "email", label: "Email" }, { name: "institution_line1", label: "Institution Line 1" },
+          { name: "institution_line2", label: "Institution Line 2" }, { name: "linkedin", label: "LinkedIn URL" },
+          { name: "scholar", label: "Google Scholar URL" }, { name: "researchgate", label: "ResearchGate URL" },
+        ]} />
+      )}
+      {active === "announcements" && <AnnouncementsAdmin />}
+      {active === "resources" && <ResourcesAdmin />}
+      {active === "publications" && <PublicationsAdmin />}
+      {active === "supervision" && <SupervisionAdmin />}
+    </DashboardShell>
   );
 }
 
@@ -139,7 +146,7 @@ function SiteContentEditor<T extends Record<string, unknown>>({
   if (isLoading) return <p className="py-10 text-muted-foreground">Loading…</p>;
 
   return (
-    <Card className="mt-4"><CardContent className="pt-6 space-y-4">
+    <Card><CardContent className="pt-6 space-y-4">
       {fields.map((f) => (
         <div key={f.name}>
           <Label>{f.label}</Label>
@@ -173,19 +180,21 @@ function useList(table: string, eqCol?: string, eqVal?: string) {
   });
 }
 
-function ListSection({ title, children, onAdd }: { title: string; children: React.ReactNode; onAdd?: () => void }) {
+function ListSection({ title, children, onAdd, headerActions }: { title: string; children: React.ReactNode; onAdd?: () => void; headerActions?: React.ReactNode }) {
   return (
-    <Card className="mt-4"><CardContent className="pt-6">
-      <div className="flex justify-between items-center mb-4">
+    <Card><CardContent className="pt-6">
+      <div className="flex justify-between items-center mb-4 gap-3 flex-wrap">
         <h3 className="font-serif text-xl font-semibold text-navy-deep">{title}</h3>
-        {onAdd && <Button size="sm" onClick={onAdd} className="bg-gold text-navy-deep hover:bg-gold-soft"><Plus size={14} className="mr-1" />Add</Button>}
+        <div className="flex gap-2 flex-wrap">
+          {headerActions}
+          {onAdd && <Button size="sm" onClick={onAdd} className="bg-gold text-navy-deep hover:bg-gold-soft"><Plus size={14} className="mr-1" />Add</Button>}
+        </div>
       </div>
       <div className="space-y-3">{children}</div>
     </CardContent></Card>
   );
 }
 
-// Announcements
 function AnnouncementsAdmin() {
   const qc = useQueryClient();
   const { data } = useList("announcements");
@@ -204,7 +213,6 @@ function AnnouncementsAdmin() {
   );
 }
 
-// Resources
 function ResourcesAdmin() {
   const qc = useQueryClient();
   const { data } = useList("resources");
@@ -228,7 +236,6 @@ function ResourcesAdmin() {
   );
 }
 
-// Publications
 function PublicationsAdmin() {
   const qc = useQueryClient();
   const { data } = useList("publications");
@@ -238,11 +245,12 @@ function PublicationsAdmin() {
     if (error) toast.error(error.message); else invalidate();
   };
   return (
-    <ListSection title="Publications">
-      <div className="flex gap-2 mb-2">
+    <ListSection title="Publications" headerActions={
+      <>
         <Button size="sm" onClick={() => add("journal")} className="bg-gold text-navy-deep hover:bg-gold-soft"><Plus size={14} className="mr-1" />Journal</Button>
         <Button size="sm" onClick={() => add("conference")} className="bg-navy-deep text-cream hover:bg-navy"><Plus size={14} className="mr-1" />Conference</Button>
-      </div>
+      </>
+    }>
       {(data ?? []).map((p: any) => (
         <RowEditor key={p.id} table="publications" row={p} onChange={invalidate}
           fields={[
@@ -255,7 +263,6 @@ function PublicationsAdmin() {
   );
 }
 
-// Supervision
 function SupervisionAdmin() {
   const qc = useQueryClient();
   const { data } = useList("supervision");
@@ -265,12 +272,13 @@ function SupervisionAdmin() {
     if (error) toast.error(error.message); else invalidate();
   };
   return (
-    <ListSection title="Supervision">
-      <div className="flex gap-2 flex-wrap mb-2">
+    <ListSection title="Supervision" headerActions={
+      <>
         <Button size="sm" onClick={() => add("phd")} className="bg-gold text-navy-deep hover:bg-gold-soft"><Plus size={14} className="mr-1" />PhD</Button>
-        <Button size="sm" onClick={() => add("msc_completed")} className="bg-navy-deep text-cream hover:bg-navy"><Plus size={14} className="mr-1" />MSc completed</Button>
+        <Button size="sm" onClick={() => add("msc_completed")} className="bg-navy-deep text-cream hover:bg-navy"><Plus size={14} className="mr-1" />MSc done</Button>
         <Button size="sm" onClick={() => add("msc_ongoing")} variant="outline"><Plus size={14} className="mr-1" />MSc ongoing</Button>
-      </div>
+      </>
+    }>
       {(data ?? []).map((s: any) => (
         <RowEditor key={s.id} table="supervision" row={s} onChange={invalidate}
           fields={[
@@ -282,7 +290,6 @@ function SupervisionAdmin() {
   );
 }
 
-// Generic row editor
 type RowField = { name: string; label: string; textarea?: boolean; number?: boolean };
 function RowEditor({
   table, row, fields, onChange, fileField, fileBucket,
