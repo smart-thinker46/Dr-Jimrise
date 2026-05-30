@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useUserRole } from "@/hooks/use-auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DashboardShell, type DashboardNavItem } from "@/components/DashboardShell";
+import { ResourcesAdmin } from "@/components/admin/ResourcesAdmin";
 import { heroFallback, aboutFallback, contactFallback } from "@/lib/content";
 
 export const Route = createFileRoute("/admin")({
@@ -213,28 +214,6 @@ function AnnouncementsAdmin() {
   );
 }
 
-function ResourcesAdmin() {
-  const qc = useQueryClient();
-  const { data } = useList("resources");
-  const invalidate = () => { qc.invalidateQueries({ queryKey: ["admin", "resources"] }); qc.invalidateQueries({ queryKey: ["resources"] }); };
-  const add = async () => {
-    const { error } = await supabase.from("resources").insert({ title: "New resource", course: "General", type: "PDF", date: new Date().toLocaleDateString(), sort_order: 0 });
-    if (error) toast.error(error.message); else invalidate();
-  };
-  return (
-    <ListSection title="Resources" onAdd={add}>
-      {(data ?? []).map((r: any) => (
-        <RowEditor key={r.id} table="resources" row={r} onChange={invalidate}
-          fields={[
-            { name: "title", label: "Title" }, { name: "course", label: "Course" },
-            { name: "type", label: "Type (PDF/PPT/DOC)" }, { name: "date", label: "Date" },
-          ]}
-          fileField="file_url" fileBucket="resources"
-        />
-      ))}
-    </ListSection>
-  );
-}
 
 function PublicationsAdmin() {
   const qc = useQueryClient();

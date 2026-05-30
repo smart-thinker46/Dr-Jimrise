@@ -82,6 +82,7 @@ export type Database = {
           course: string
           created_at: string
           date: string
+          description: string | null
           file_url: string | null
           id: string
           sort_order: number
@@ -92,6 +93,7 @@ export type Database = {
           course: string
           created_at?: string
           date: string
+          description?: string | null
           file_url?: string | null
           id?: string
           sort_order?: number
@@ -102,6 +104,7 @@ export type Database = {
           course?: string
           created_at?: string
           date?: string
+          description?: string | null
           file_url?: string | null
           id?: string
           sort_order?: number
