@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useUserRole } from "@/hooks/use-auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DashboardShell, type DashboardNavItem } from "@/components/DashboardShell";
+import { ResourcesAdmin } from "@/components/admin/ResourcesAdmin";
 import { heroFallback, aboutFallback, contactFallback } from "@/lib/content";
 
 export const Route = createFileRoute("/admin")({
