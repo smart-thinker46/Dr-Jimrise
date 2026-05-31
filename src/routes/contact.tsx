@@ -1,13 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Mail, MapPin, Linkedin, GraduationCap, BookOpen, ArrowRight } from "lucide-react";
+import { Mail, MapPin, Linkedin, GraduationCap, BookOpen, ArrowRight, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Layout, PageHeader } from "@/components/Layout";
 import { toast } from "sonner";
-import { useSiteContent, contactFallback, type ContactContent } from "@/lib/content";
+import { useSiteContent, contactFallback, normalizeContactContent } from "@/lib/content";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/contact")({
   head: () => ({
@@ -20,8 +21,11 @@ export const Route = createFileRoute("/contact")({
 });
 
 function ContactPage() {
-  const { data } = useSiteContent<Partial<ContactContent>>("contact", contactFallback);
-  const c = { ...contactFallback, ...(isContactObject(data) ? data : {}) };
+  const { data } = useSiteContent<unknown>("contact", contactFallback);
+  const c = normalizeContactContent(data);
+  const email = c.email;
+  const institutionLine1 = c.institution_line1;
+  const institutionLine2 = c.institution_line2;
   const [sending, setSending] = useState(false);
 
   return (
@@ -35,7 +39,7 @@ function ContactPage() {
                 <Mail className="text-gold mt-1 shrink-0" size={20} />
                 <div>
                   <p className="text-xs uppercase tracking-widest text-muted-foreground font-semibold">Email</p>
-                  <a href={`mailto:${c.email}`} className="font-medium text-navy-deep hover:text-gold">{c.email}</a>
+                  <a href={`mailto:${email}`} className="font-medium text-navy-deep hover:text-gold">{email}</a>
                 </div>
               </div>
               <div className="flex items-start gap-4 p-5 rounded-xl border border-border">
@@ -43,8 +47,8 @@ function ContactPage() {
                 <div>
                   <p className="text-xs uppercase tracking-widest text-muted-foreground font-semibold">Institution</p>
                   <p className="font-medium text-navy-deep leading-snug">
-                    {c.institution_line1}<br />
-                    <span className="text-sm text-muted-foreground font-normal">{c.institution_line2}</span>
+                    {institutionLine1}<br />
+                    <span className="text-sm text-muted-foreground font-normal">{institutionLine2}</span>
                   </p>
                 </div>
               </div>
@@ -56,7 +60,7 @@ function ContactPage() {
                     { Icon: GraduationCap, label: "Google Scholar", href: c.scholar },
                     { Icon: BookOpen, label: "ResearchGate", href: c.researchgate },
                   ].map(({ Icon, label, href }) => (
-                    <a key={label} href={safeExternalUrl(href)} target={href && href !== "#" ? "_blank" : undefined} rel={href && href !== "#" ? "noreferrer" : undefined} aria-label={label}
+                    <a key={label} href={safeExternalUrl(href)} target={isRealExternalUrl(href) ? "_blank" : undefined} rel={isRealExternalUrl(href) ? "noreferrer" : undefined} aria-label={label}
                       className="w-11 h-11 rounded-lg bg-navy-deep text-cream flex items-center justify-center hover:bg-gold hover:text-navy-deep transition-colors">
                       <Icon size={18} />
                     </a>
@@ -67,24 +71,48 @@ function ContactPage() {
 
             <form
               className="lg:col-span-3 bg-card border border-border rounded-2xl p-6 md:p-8 space-y-5 shadow-sm"
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
                 setSending(true);
-                setTimeout(() => {
-                  toast.success("Thank you — your message has been received.");
-                  (e.target as HTMLFormElement).reset();
-                  setSending(false);
-                }, 400);
+                const form = e.currentTarget;
+                const formData = new FormData(form);
+                const toastId = toast.loading("Sending message...", {
+                  description: "Please wait while we submit your enquiry.",
+                });
+                const { error } = await supabase.from("contact_messages" as any).insert({
+                  name: String(formData.get("name") ?? "").trim(),
+                  email: String(formData.get("email") ?? "").trim(),
+                  phone: String(formData.get("phone") ?? "").trim(),
+                  subject: String(formData.get("subject") ?? "").trim(),
+                  message: String(formData.get("message") ?? "").trim(),
+                });
+                setSending(false);
+                if (error) {
+                  toast.error("Message could not be sent", { id: toastId, description: error.message });
+                  return;
+                }
+                toast.success("Thank you. Your message has been received.", {
+                  id: toastId,
+                  description: "The admin can now review it from the dashboard.",
+                });
+                form.reset();
               }}
             >
               <div className="grid sm:grid-cols-2 gap-5">
                 <div className="space-y-2">
                   <Label htmlFor="name">Name</Label>
-                  <Input id="name" required maxLength={100} placeholder="Your full name" />
+                  <Input id="name" name="name" required maxLength={100} placeholder="Your full name" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" required maxLength={255} placeholder="you@example.com" />
+                  <Input id="email" name="email" type="email" required maxLength={255} placeholder="you@example.com" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone number</Label>
+                <div className="relative">
+                  <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input id="phone" name="phone" type="tel" required maxLength={40} placeholder="+254 700 000 000" className="pl-9" />
                 </div>
               </div>
               <div className="space-y-2">
@@ -105,7 +133,7 @@ function ContactPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="message">Message</Label>
-                <Textarea id="message" required rows={6} maxLength={2000} placeholder="Write your message…" />
+                <Textarea id="message" name="message" required rows={6} maxLength={2000} placeholder="Write your message…" />
               </div>
               <Button type="submit" size="lg" disabled={sending} className="w-full bg-navy-deep hover:bg-navy text-cream font-semibold">
                 {sending ? "Sending..." : (<>Send Message <ArrowRight size={16} className="ml-2" /></>)}
@@ -118,14 +146,17 @@ function ContactPage() {
   );
 }
 
-function isContactObject(value: unknown): value is Partial<ContactContent> {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
-}
-
-function safeExternalUrl(value?: string) {
-  if (!value || value.trim() === "") return "#";
-  const trimmed = value.trim();
+function safeExternalUrl(value?: unknown) {
+  const trimmed = contactText(value, "#");
   if (trimmed === "#") return "#";
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   return `https://${trimmed}`;
+}
+
+function isRealExternalUrl(value?: unknown) {
+  return safeExternalUrl(value) !== "#";
+}
+
+function contactText(value: unknown, fallback: string) {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }

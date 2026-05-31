@@ -1,11 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Megaphone, BookOpen, Download, Clock, Calendar, FileText, FileType, Presentation } from "lucide-react";
+import { Megaphone, BookOpen, Download, Clock, Mail, FileText, FileType, Presentation, ExternalLink, Eye, Lock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Layout, PageHeader } from "@/components/Layout";
 import { courses as coursesFallback } from "@/lib/site-data";
-import { useAnnouncements, useResources, useSiteContent } from "@/lib/content";
+import { ResourceDirectoryItem, useAnnouncements, useResourceDirectory, useSiteContent } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { useAuth, useUserAccessStatus } from "@/hooks/use-auth";
 
@@ -22,9 +22,9 @@ export const Route = createFileRoute("/resources")({
 function ResourcesPage() {
   const [filter, setFilter] = useState<string>("All");
   const { data: announcementsData } = useAnnouncements();
-  const { data: resourcesData } = useResources();
-  const { data: courses } = useSiteContent<typeof coursesFallback>("courses", coursesFallback);
   const { user } = useAuth();
+  const { data: resourcesData } = useResourceDirectory();
+  const { data: courses } = useSiteContent<typeof coursesFallback>("courses", coursesFallback);
   const { data: accessStatus = "active" } = useUserAccessStatus(user);
   const announcements = announcementsData ?? [];
   const resources = resourcesData ?? [];
@@ -39,16 +39,15 @@ function ResourcesPage() {
       <section className="py-16 md:py-24 bg-gradient-to-b from-secondary/60 to-secondary/30">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {accessStatus !== "active" ? (
-            <Card className="border-destructive/40">
+            <Card className="mb-10 border-destructive/40">
               <CardContent className="pt-6">
                 <h2 className="font-serif text-xl font-bold text-navy-deep">Resource access restricted</h2>
                 <p className="text-sm text-muted-foreground mt-2">
-                  Your account is {accessStatus}. Contact the site administrator for help.
+                  Your account is {accessStatus}. You can browse available resources, but protected materials remain locked until the administrator activates your account.
                 </p>
               </CardContent>
             </Card>
-          ) : (
-          <>
+          ) : null}
 
           <div className="mb-14">
             <div className="flex items-center gap-3 mb-6">
@@ -110,6 +109,7 @@ function ResourcesPage() {
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filtered.map((r) => {
                 const Icon = fileIcon(r.type);
+                const action = getResourceAction(r, Boolean(user));
                 return (
                   <Card key={r.id} className="hover:shadow-lg hover:border-gold/50 transition-all">
                     <CardContent className="pt-5">
@@ -122,14 +122,48 @@ function ResourcesPage() {
                           <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-2 text-xs text-muted-foreground">
                             <span className="text-gold font-semibold">{r.course}</span>
                             <span>·</span><span>{r.type}</span><span>·</span><span>{r.date}</span>
+                            {r.access_level === "authenticated" && (
+                              <>
+                                <span>·</span>
+                                <span className="inline-flex items-center gap-1 text-navy-deep/70">
+                                  <Lock size={11} /> Group access
+                                </span>
+                              </>
+                            )}
                           </div>
+                          {r.allowed_groups.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-1.5">
+                              {r.allowed_groups.map((group) => (
+                                <span key={group} className="rounded-full bg-navy-deep/5 px-2 py-1 text-[11px] font-semibold text-navy-deep/75">
+                                  {group}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <Button asChild size="sm" variant="outline" className="w-full mt-4 border-navy/20 hover:bg-navy-deep hover:text-cream hover:border-navy-deep" disabled={!r.file_url}>
-                        <a href={r.file_url || "#"} target="_blank" rel="noreferrer">
-                          <Download size={14} className="mr-2" /> {r.file_url ? "Download" : "Coming soon"}
-                        </a>
-                      </Button>
+                      {action.kind === "restricted" ? (
+                        <Button size="sm" variant="outline" className="w-full mt-4 border-navy/20 text-muted-foreground" disabled>
+                          <Lock size={14} className="mr-2" /> {action.label}
+                        </Button>
+                      ) : (
+                        <Button asChild size="sm" variant="outline" className="w-full mt-4 border-navy/20 hover:bg-navy-deep hover:text-cream hover:border-navy-deep">
+                          {action.kind === "login" ? (
+                            <Link to="/auth">
+                              <Lock size={14} className="mr-2" /> Login to access
+                            </Link>
+                          ) : action.kind === "internal" ? (
+                            <Link to="/resources/$id" params={{ id: r.id }}>
+                              <Eye size={14} className="mr-2" /> View
+                            </Link>
+                          ) : (
+                            <a href={action.href || "#"} target="_blank" rel="noreferrer" download={action.download || undefined}>
+                              {action.icon === "external" ? <ExternalLink size={14} className="mr-2" /> : <Download size={14} className="mr-2" />}
+                              {action.label}
+                            </a>
+                          )}
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 );
@@ -147,20 +181,44 @@ function ResourcesPage() {
                 <h3 className="font-serif text-2xl md:text-3xl font-bold mb-2">Have a question? Drop by.</h3>
                 <p className="text-cream/75 leading-relaxed">In-person consultations are open during the week. Email ahead for slots outside these times.</p>
               </div>
-              <ul className="space-y-3 text-sm bg-cream/5 rounded-xl p-5 border border-cream/10">
-                <li className="flex justify-between gap-4"><span className="text-cream/70">Tuesday</span><span className="font-semibold">10:00 – 12:00</span></li>
-                <li className="flex justify-between gap-4"><span className="text-cream/70">Wednesday</span><span className="font-semibold">14:00 – 16:00</span></li>
-                <li className="flex justify-between gap-4"><span className="text-cream/70">Friday</span><span className="font-semibold">11:00 – 13:00</span></li>
-                <li className="pt-3 border-t border-cream/10 flex items-center gap-2 text-gold">
-                  <Calendar size={14} /> <span className="text-xs">Book via email</span>
-                </li>
-              </ul>
+              <div className="bg-cream/5 rounded-xl p-5 border border-cream/10">
+                <Button asChild className="w-full bg-gold text-navy-deep hover:bg-gold/90 active:scale-[0.98]">
+                  <Link to="/contact">
+                    <Mail size={16} className="mr-2" />
+                    Contact
+                  </Link>
+                </Button>
+              </div>
             </CardContent>
           </Card>
-          </>
-          )}
         </div>
       </section>
     </Layout>
   );
+}
+
+function getResourceAction(resource: ResourceDirectoryItem, isLoggedIn: boolean) {
+  if (!resource.can_access && !isLoggedIn) {
+    return { kind: "login", href: "/auth", label: "Login to access", icon: "lock", download: false };
+  }
+  if (!resource.can_access) {
+    return { kind: "restricted", href: "", label: "Restricted to assigned group", icon: "lock", download: false };
+  }
+  if (resource.source_type === "link") {
+    return { kind: "external", href: normalizeUrl(resource.link_url), label: "Open Link", icon: "external", download: false };
+  }
+  if (!resource.file_url) {
+    return { kind: "external", href: "", label: "Coming soon", icon: "download", download: false };
+  }
+  if (resource.allow_download === false) {
+    return { kind: "internal", href: `/resources/${resource.id}`, label: "View", icon: "view", download: false };
+  }
+  return { kind: "external", href: resource.file_url, label: "Download", icon: "download", download: true };
+}
+
+function normalizeUrl(value?: string | null) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return "";
+  if (/^(https?:|mailto:|tel:)/i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
 }

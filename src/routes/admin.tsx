@@ -1,15 +1,26 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Trash2, Save, Plus, ShieldCheck, User, Info, Mail, Megaphone, FolderOpen, BookOpen, Users, UserCog, FilePenLine,
   Bold, Italic, Underline, Link as LinkIcon, Image, MousePointerClick, Palette, List, ListOrdered, Quote,
   Database, LayoutDashboard, BarChart3, Bell, FileText, FileUp, GraduationCap, Activity, AlignLeft, AlignCenter, AlignRight,
-  AlignJustify, Undo2, Redo2, Eraser, Minus, Table2, Heading1, Heading2, Pilcrow, Highlighter,
+  AlignJustify, Undo2, Redo2, Eraser, Minus, Table2, Heading1, Heading2, Pilcrow, Highlighter, MessageSquare, PhoneCall, ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,8 +28,10 @@ import { useAuth, useUserRole } from "@/hooks/use-auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DashboardShell, type DashboardNavItem } from "@/components/DashboardShell";
 import { ResourcesAdmin } from "@/components/admin/ResourcesAdmin";
-import { heroFallback, aboutFallback, contactFallback, homeStatsFallback } from "@/lib/content";
+import { ConfirmAction } from "@/components/ConfirmAction";
+import { heroFallback, aboutFallback, contactFallback, homeStatsFallback, useStudentGroups, type StudentGroup } from "@/lib/content";
 import { optimizedImageUrl } from "@/lib/images";
+import { cn } from "@/lib/utils";
 import {
   education,
   experience,
@@ -52,8 +65,10 @@ const NAV: DashboardNavItem[] = [
   },
   { id: "announcements", label: "Announcements", icon: Megaphone },
   { id: "resources", label: "Resources", icon: FolderOpen },
+  { id: "groups", label: "Groups", icon: Users },
+  { id: "messages", label: "Messages", icon: MessageSquare },
   { id: "users", label: "Users", icon: UserCog },
-  { id: "blogs", label: "Blogs", icon: FilePenLine },
+  { id: "blogs", label: "Insights", icon: FilePenLine },
 ];
 
 function AdminPage() {
@@ -138,10 +153,16 @@ function AdminPage() {
       )}
       {active === "announcements" && <AnnouncementsAdmin />}
       {active === "resources" && <ResourcesAdmin />}
+      {active === "groups" && <GroupsAdmin />}
+      {active === "messages" && <ContactMessagesAdmin />}
       {active === "publications" && <PublicationsAdmin />}
       {active === "supervision" && <SupervisionAdmin />}
       {active === "academic-data" && <AcademicDataAdmin />}
-      {active === "users" && <UsersAdmin currentUserId={user.id} />}
+      {active === "users" && (
+        <SectionErrorBoundary section="Users">
+          <UsersAdmin currentUserId={user.id} />
+        </SectionErrorBoundary>
+      )}
       {active === "blogs" && <BlogsAdmin />}
     </DashboardShell>
   );
@@ -191,6 +212,7 @@ function AdminDashboard({ onSelect }: { onSelect: (id: string) => void }) {
         publications,
         supervision,
         blogs,
+        messages,
         siteContent,
         usersResult,
         recentAnnouncements,
@@ -202,6 +224,7 @@ function AdminDashboard({ onSelect }: { onSelect: (id: string) => void }) {
         countTable("publications"),
         countTable("supervision"),
         countTable("blog_posts"),
+        countTable("contact_messages"),
         countTable("site_content"),
         (supabase.rpc as any)("admin_list_users"),
         supabase.from("announcements").select("id,title,date,created_at").order("created_at", { ascending: false }).limit(4),
@@ -229,6 +252,7 @@ function AdminDashboard({ onSelect }: { onSelect: (id: string) => void }) {
           publications,
           supervision,
           blogs,
+          messages,
           publishedBlogs,
           siteContent,
         },
@@ -243,9 +267,10 @@ function AdminDashboard({ onSelect }: { onSelect: (id: string) => void }) {
     { label: "Total Users", value: data?.counts.users ?? 0, icon: Users, target: "users", detail: `${data?.counts.activeUsers ?? 0} active` },
     { label: "Resources", value: data?.counts.resources ?? 0, icon: FolderOpen, target: "resources", detail: "Student downloads" },
     { label: "Announcements", value: data?.counts.announcements ?? 0, icon: Megaphone, target: "announcements", detail: "Student notices" },
+    { label: "Messages", value: data?.counts.messages ?? 0, icon: MessageSquare, target: "messages", detail: "Contact enquiries" },
     { label: "Publications", value: data?.counts.publications ?? 0, icon: BookOpen, target: "publications", detail: "Journal and conference items" },
     { label: "Supervision", value: data?.counts.supervision ?? 0, icon: GraduationCap, target: "supervision", detail: "Students listed" },
-    { label: "Blog Posts", value: data?.counts.blogs ?? 0, icon: FilePenLine, target: "blogs", detail: `${data?.counts.publishedBlogs ?? 0} recently published` },
+    { label: "Insights", value: data?.counts.blogs ?? 0, icon: FilePenLine, target: "blogs", detail: `${data?.counts.publishedBlogs ?? 0} recently published` },
     { label: "Site Sections", value: data?.counts.siteContent ?? 0, icon: Database, target: "academic-data", detail: "Editable content records" },
     { label: "Restricted Users", value: data?.counts.blockedUsers ?? 0, icon: ShieldCheck, target: "users", detail: "Suspended or blocked" },
   ];
@@ -260,7 +285,8 @@ function AdminDashboard({ onSelect }: { onSelect: (id: string) => void }) {
               key={stat.label}
               type="button"
               onClick={() => onSelect(stat.target)}
-              className="text-left rounded-xl border border-border bg-card p-5 hover:border-gold/60 hover:shadow-lg transition-all"
+              className="group text-left rounded-xl border border-border bg-card p-5 hover:border-gold/60 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60 transition-all"
+              aria-label={`Open ${stat.label}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -268,7 +294,7 @@ function AdminDashboard({ onSelect }: { onSelect: (id: string) => void }) {
                   <p className="font-serif text-3xl font-bold text-navy-deep mt-2">{isLoading ? "..." : stat.value}</p>
                   <p className="text-xs text-muted-foreground mt-1">{stat.detail}</p>
                 </div>
-                <span className="w-10 h-10 rounded-lg bg-gold/15 flex items-center justify-center text-gold">
+                <span className="w-10 h-10 rounded-lg bg-gold/15 flex items-center justify-center text-gold group-hover:bg-gold group-hover:text-navy-deep transition-colors">
                   <Icon size={19} />
                 </span>
               </div>
@@ -292,11 +318,11 @@ function AdminDashboard({ onSelect }: { onSelect: (id: string) => void }) {
           {!isLoading && (data?.recentResources ?? []).length === 0 && <EmptyDashboardText text="No resources uploaded yet." />}
         </DashboardPanel>
 
-        <DashboardPanel title="Blog Activity" icon={Activity} action="Open" onAction={() => onSelect("blogs")}>
+        <DashboardPanel title="Insight Activity" icon={Activity} action="Open" onAction={() => onSelect("blogs")}>
           {(data?.recentBlogs ?? []).map((item: any) => (
             <NotificationItem key={item.id} title={item.title} meta={`${item.status} · ${formatDate(item.updated_at ?? item.created_at)}`} />
           ))}
-          {!isLoading && (data?.recentBlogs ?? []).length === 0 && <EmptyDashboardText text="No blog activity yet." />}
+          {!isLoading && (data?.recentBlogs ?? []).length === 0 && <EmptyDashboardText text="No insight activity yet." />}
         </DashboardPanel>
       </div>
     </div>
@@ -317,14 +343,25 @@ function DashboardPanel({
   children: React.ReactNode;
 }) {
   return (
-    <Card>
+    <Card
+      role="button"
+      tabIndex={0}
+      onClick={onAction}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onAction();
+        }
+      }}
+      className="cursor-pointer hover:border-gold/60 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60 transition-all"
+    >
       <CardContent className="pt-6">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
             <Icon size={18} className="text-gold" />
             <h3 className="font-serif text-lg font-semibold text-navy-deep">{title}</h3>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={onAction}>{action}</Button>
+          <Button type="button" variant="outline" size="sm" onClick={(event) => { event.stopPropagation(); onAction(); }}>{action}</Button>
         </div>
         <div className="space-y-3">{children}</div>
       </CardContent>
@@ -370,9 +407,12 @@ function SiteContentEditor<T extends Record<string, unknown>>({
   useEffect(() => { if (data) setForm(data as Record<string, unknown>); }, [data]);
 
   const save = async () => {
+    const toastId = toast.loading("Saving site content...", {
+      description: "Updating the public website.",
+    });
     const { error } = await supabase.from("site_content").upsert({ key: sectionKey, value: form as never });
-    if (error) return toast.error(error.message);
-    toast.success("Saved");
+    if (error) return toast.error("Save failed", { id: toastId, description: error.message });
+    toast.success("Site content saved", { id: toastId, description: "The public website has been updated." });
     qc.invalidateQueries({ queryKey: ["site_content", sectionKey] });
   };
 
@@ -431,13 +471,13 @@ function SiteContentEditor<T extends Record<string, unknown>>({
           {(form[imageField] as string) && (
             <div className="flex flex-col sm:flex-row gap-4 sm:items-end">
               <img
-                src={optimizedImageUrl(form[imageField] as string, 240)}
+                src={optimizedImageUrl(form[imageField] as string, 240, 72, "contain")}
                 alt={imageLabel}
                 width={144}
                 height={176}
                 loading="lazy"
                 decoding="async"
-                className="w-36 h-44 object-cover rounded-lg border bg-background"
+                className="w-36 h-44 object-contain rounded-lg border bg-background"
               />
               <Button type="button" variant="outline" size="sm" onClick={removeImage}>Remove Photo</Button>
             </div>
@@ -495,19 +535,191 @@ function ListSection({ title, children, onAdd, headerActions }: { title: string;
 
 function AnnouncementsAdmin() {
   const qc = useQueryClient();
-  const { data } = useList("announcements");
-  const invalidate = () => { qc.invalidateQueries({ queryKey: ["admin", "announcements"] }); qc.invalidateQueries({ queryKey: ["announcements"] }); };
+  const { data: groups = [] } = useStudentGroups();
+  const { data = [], isLoading } = useQuery({
+    queryKey: ["admin", "announcements"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.rpc as any)("admin_list_announcements");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["admin", "announcements"] });
+    qc.invalidateQueries({ queryKey: ["admin", "dashboard"] });
+    qc.invalidateQueries({ queryKey: ["announcements"] });
+  };
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin:announcements:groups")
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcements" }, () => invalidate())
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcement_group_access" }, () => invalidate())
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [qc]);
   const add = async () => {
-    const { error } = await supabase.from("announcements").insert({ title: "New announcement", body: "", date: new Date().toLocaleDateString(), sort_order: 0 });
+    const { error } = await supabase.from("announcements").insert({
+      title: "New announcement",
+      body: "",
+      date: new Date().toLocaleDateString(),
+      sort_order: 0,
+      target_scope: "general",
+    } as any);
     if (error) toast.error(error.message); else invalidate();
   };
   return (
     <ListSection title="Announcements" onAdd={add}>
-      {(data ?? []).map((a: any) => (
-        <RowEditor key={a.id} table="announcements" row={a} onChange={invalidate}
-          fields={[{ name: "title", label: "Title" }, { name: "date", label: "Date" }, { name: "body", label: "Body", textarea: true }]} />
-      ))}
+      {isLoading ? <p className="py-6 text-sm text-muted-foreground">Loading announcements...</p> : null}
+      {(data ?? []).map((a: any) => <AnnouncementEditor key={a.id} row={a} groups={groups} onChange={invalidate} />)}
     </ListSection>
+  );
+}
+
+function AnnouncementEditor({ row, groups, onChange }: { row: any; groups: StudentGroup[]; onChange: () => void }) {
+  const [form, setForm] = useState<any>({
+    ...row,
+    target_scope: row.target_scope ?? "general",
+    group_ids: row.group_ids ?? [],
+  });
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setForm({
+      ...row,
+      target_scope: row.target_scope ?? "general",
+      group_ids: row.group_ids ?? [],
+    });
+  }, [row]);
+
+  const selectedGroups = new Set<string>(form.group_ids ?? []);
+  const toggleGroup = (groupId: string) => {
+    const next = new Set(selectedGroups);
+    if (next.has(groupId)) next.delete(groupId);
+    else next.add(groupId);
+    setForm({ ...form, group_ids: Array.from(next), target_scope: "group" });
+  };
+
+  const save = async () => {
+    if (form.target_scope === "group" && (form.group_ids ?? []).length === 0) {
+      return toast.error("Choose at least one group", { description: "Group announcements need a target group." });
+    }
+
+    setBusy(true);
+    const toastId = toast.loading("Saving announcement...", {
+      description: "Updating student dashboard notices.",
+    });
+    const payload = {
+      title: form.title ?? "",
+      date: form.date ?? "",
+      body: form.body ?? "",
+      sort_order: Number(form.sort_order ?? 0),
+      target_scope: form.target_scope,
+    };
+    const { error } = await supabase.from("announcements").update(payload as any).eq("id", row.id);
+    if (error) {
+      setBusy(false);
+      return toast.error("Save failed", { id: toastId, description: error.message });
+    }
+
+    const { error: deleteError } = await supabase
+      .from("announcement_group_access" as any)
+      .delete()
+      .eq("announcement_id", row.id);
+    if (deleteError) {
+      setBusy(false);
+      return toast.error("Group update failed", { id: toastId, description: deleteError.message });
+    }
+
+    if (form.target_scope === "group") {
+      const rows = (form.group_ids ?? []).map((groupId: string) => ({ announcement_id: row.id, group_id: groupId }));
+      const { error: insertError } = await supabase.from("announcement_group_access" as any).insert(rows);
+      if (insertError) {
+        setBusy(false);
+        return toast.error("Group update failed", { id: toastId, description: insertError.message });
+      }
+    }
+
+    setBusy(false);
+    toast.success("Announcement saved", { id: toastId });
+    onChange();
+  };
+
+  const remove = async () => {
+    const { error } = await supabase.from("announcements").delete().eq("id", row.id);
+    if (error) return toast.error("Delete failed", { description: error.message });
+    toast.success("Announcement deleted");
+    onChange();
+  };
+
+  return (
+    <div className="border rounded-lg p-4 bg-background space-y-4">
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div>
+          <Label className="text-xs">Title</Label>
+          <Input value={form.title ?? ""} onChange={(event) => setForm({ ...form, title: event.target.value })} />
+        </div>
+        <div>
+          <Label className="text-xs">Date</Label>
+          <Input value={form.date ?? ""} onChange={(event) => setForm({ ...form, date: event.target.value })} />
+        </div>
+        <div>
+          <Label className="text-xs">Audience</Label>
+          <select
+            value={form.target_scope ?? "general"}
+            onChange={(event) => setForm({ ...form, target_scope: event.target.value, group_ids: event.target.value === "general" ? [] : form.group_ids })}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="general">General announcement</option>
+            <option value="group">Specific group(s)</option>
+          </select>
+        </div>
+        <div>
+          <Label className="text-xs">Sort order</Label>
+          <Input type="number" value={form.sort_order ?? 0} onChange={(event) => setForm({ ...form, sort_order: Number(event.target.value) })} />
+        </div>
+        <div className="sm:col-span-2">
+          <Label className="text-xs">Body</Label>
+          <Textarea rows={4} value={form.body ?? ""} onChange={(event) => setForm({ ...form, body: event.target.value })} />
+        </div>
+      </div>
+
+      {form.target_scope === "group" && (
+        <div className="rounded-lg border border-border bg-secondary/30 p-4">
+          <Label className="text-xs">Groups who should see this announcement</Label>
+          <div className="mt-3 grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {groups.map((group) => (
+              <label key={group.id} className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm">
+                <input type="checkbox" checked={selectedGroups.has(group.id)} onChange={() => toggleGroup(group.id)} />
+                <span>{group.group_name}</span>
+              </label>
+            ))}
+          </div>
+          {groups.length === 0 && <p className="mt-2 text-sm text-muted-foreground">Create student groups first before targeting announcements.</p>}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-xs text-muted-foreground">
+          {form.target_scope === "general"
+            ? "Visible to everyone and all student dashboards."
+            : `Visible only to: ${groups.filter((group) => selectedGroups.has(group.id)).map((group) => group.group_name).join(", ") || "No group selected"}`}
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={save} disabled={busy} className="bg-navy-deep hover:bg-navy text-cream"><Save size={14} className="mr-1" />Save</Button>
+          <ConfirmAction
+            title="Delete announcement?"
+            description={`This will permanently remove "${row.title}".`}
+            confirmLabel="Delete announcement"
+            destructive
+            onConfirm={remove}
+          >
+            <Button size="sm" variant="destructive" disabled={busy}><Trash2 size={14} className="mr-1" />Delete</Button>
+          </ConfirmAction>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -552,6 +764,9 @@ function PublicationEditor({ row, onChange }: { row: any; onChange: () => void }
 
   const save = async () => {
     setBusy(true);
+    const toastId = toast.loading("Saving publication...", {
+      description: "Updating publication details.",
+    });
     const articleUrl = String(form.article_url ?? "").trim();
     const payload = {
       kind: form.kind,
@@ -567,13 +782,12 @@ function PublicationEditor({ row, onChange }: { row: any; onChange: () => void }
     };
     const { error } = await supabase.from("publications").update(payload as any).eq("id", row.id);
     setBusy(false);
-    if (error) toast.error(error.message); else { toast.success("Publication saved"); onChange(); }
+    if (error) toast.error("Save failed", { id: toastId, description: error.message }); else { toast.success("Publication saved", { id: toastId }); onChange(); }
   };
 
   const remove = async () => {
-    if (!confirm("Delete this publication?")) return;
     const { error } = await supabase.from("publications").delete().eq("id", row.id);
-    if (error) toast.error(error.message); else { toast.success("Deleted"); onChange(); }
+    if (error) toast.error("Delete failed", { description: error.message }); else { toast.success("Publication deleted"); onChange(); }
   };
 
   const uploadPdf = async (file: File) => {
@@ -665,7 +879,15 @@ function PublicationEditor({ row, onChange }: { row: any; onChange: () => void }
 
       <div className="flex gap-2">
         <Button size="sm" onClick={save} disabled={busy} className="bg-navy-deep hover:bg-navy text-cream"><Save size={14} className="mr-1" />Save</Button>
-        <Button size="sm" variant="destructive" onClick={remove} disabled={busy}><Trash2 size={14} className="mr-1" />Delete</Button>
+        <ConfirmAction
+          title="Delete publication?"
+          description={`This will remove "${row.title}" from the website.`}
+          confirmLabel="Delete publication"
+          destructive
+          onConfirm={remove}
+        >
+          <Button size="sm" variant="destructive" disabled={busy}><Trash2 size={14} className="mr-1" />Delete</Button>
+        </ConfirmAction>
       </div>
     </div>
   );
@@ -954,6 +1176,9 @@ function AcademicContentEditor({ section }: { section: AcademicSection }) {
 
   const save = async () => {
     setBusy(true);
+    const toastId = toast.loading("Saving insight...", {
+      description: "Publishing the latest content.",
+    });
     const { error } = await supabase.from("site_content").upsert({ key: section.key, value: value as never });
     setBusy(false);
     if (error) return toast.error(error.message);
@@ -1133,7 +1358,7 @@ type AdminUser = {
   id: string;
   email: string;
   role: "admin" | "student" | "user";
-  status: "active" | "suspended" | "blocked";
+  status: "pending" | "active" | "suspended" | "blocked";
   reason: string | null;
   confirmed: boolean;
   created_at: string;
@@ -1143,16 +1368,16 @@ type AdminUser = {
   organization_name?: string | null;
   education_level?: string | null;
   program?: string | null;
+  group_id?: string | null;
+  group_name?: string | null;
 };
 
-function UsersAdmin({ currentUserId }: { currentUserId: string }) {
-  const qc = useQueryClient();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"student" | "admin" | "user">("student");
-  const [busy, setBusy] = useState(false);
+const EMPTY_ADMIN_USERS: AdminUser[] = [];
 
-  const { data = [], isLoading } = useQuery({
+function GroupsAdmin() {
+  const qc = useQueryClient();
+  const { data: groups = [], isLoading, error: groupsError } = useStudentGroups();
+  const { data: users = [] } = useQuery({
     queryKey: ["admin", "users"],
     queryFn: async () => {
       const { data, error } = await (supabase.rpc as any)("admin_list_users");
@@ -1160,8 +1385,470 @@ function UsersAdmin({ currentUserId }: { currentUserId: string }) {
       return (data ?? []) as AdminUser[];
     },
   });
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
 
-  const refresh = () => qc.invalidateQueries({ queryKey: ["admin", "users"] });
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["student_groups"] });
+    qc.invalidateQueries({ queryKey: ["admin", "users"] });
+  };
+
+  const createGroup = async () => {
+    if (!name.trim()) return toast.error("Group name is required.");
+    const { error } = await supabase.from("student_groups" as any).insert({
+      group_name: name.trim(),
+      description: description.trim(),
+    });
+    if (error) return toast.error("Group creation failed", { description: error.message });
+    toast.success("Group created", { description: name.trim() });
+    setName("");
+    setDescription("");
+    refresh();
+  };
+
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardContent className="pt-6 space-y-4">
+          <h3 className="font-serif text-xl font-semibold text-navy-deep">Create Student Group</h3>
+          <div className="grid md:grid-cols-3 gap-3">
+            <div>
+              <Label>Group Name</Label>
+              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Year 1 Mathematics" />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Description</Label>
+              <Input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Short group description" />
+            </div>
+          </div>
+          <Button onClick={createGroup} className="bg-gold text-navy-deep hover:bg-gold-soft">
+            <Plus size={16} className="mr-2" />Create Group
+          </Button>
+        </CardContent>
+      </Card>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        {groupsError ? (
+          <div className="lg:col-span-2 rounded-xl border border-destructive/30 bg-destructive/5 p-5">
+            <p className="font-semibold text-destructive">Groups could not load</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {groupsError instanceof Error ? groupsError.message : "Please refresh this section."}
+            </p>
+          </div>
+        ) : isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading groups...</p>
+        ) : groups.length === 0 ? (
+          <div className="lg:col-span-2 rounded-xl border border-dashed border-border bg-secondary/30 p-10 text-center">
+            <Users className="mx-auto mb-3 text-muted-foreground/70" size={30} />
+            <p className="font-semibold text-navy-deep">No groups found</p>
+            <p className="text-sm text-muted-foreground">Create the first student group above.</p>
+          </div>
+        ) : groups.map((group) => (
+          <GroupCard
+            key={group.id}
+            group={group}
+            students={users.filter((user) => user.group_id === group.id)}
+            onChange={refresh}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GroupCard({ group, students, onChange }: { group: StudentGroup; students: AdminUser[]; onChange: () => void }) {
+  const [name, setName] = useState(group.group_name);
+  const [description, setDescription] = useState(group.description);
+  useEffect(() => {
+    setName(group.group_name);
+    setDescription(group.description);
+  }, [group]);
+
+  const save = async () => {
+    const { error } = await supabase
+      .from("student_groups" as any)
+      .update({ group_name: name.trim(), description: description.trim() })
+      .eq("id", group.id);
+    if (error) return toast.error("Group save failed", { description: error.message });
+    toast.success("Group saved", { description: name.trim() });
+    onChange();
+  };
+
+  const remove = async () => {
+    const { error } = await supabase.from("student_groups" as any).delete().eq("id", group.id);
+    if (error) return toast.error("Group delete failed", { description: error.message });
+    toast.success("Group deleted", { description: group.group_name });
+    onChange();
+  };
+
+  return (
+    <Card>
+      <CardContent className="pt-6 space-y-4">
+        <div className="grid gap-3">
+          <div>
+            <Label>Group Name</Label>
+            <Input value={name} onChange={(event) => setName(event.target.value)} />
+          </div>
+          <div>
+            <Label>Description</Label>
+            <Textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
+          </div>
+        </div>
+        <div className="rounded-lg bg-secondary/40 p-3">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Students in this group</p>
+          <div className="mt-2 space-y-1">
+            {students.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic">No students assigned yet.</p>
+            ) : students.map((student) => (
+              <p key={student.id} className="text-sm text-navy-deep">
+                {[student.first_name, student.last_name].filter(Boolean).join(" ") || student.email}
+                <span className="text-muted-foreground"> · {student.status}</span>
+              </p>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={save} className="bg-navy-deep text-cream hover:bg-navy">
+            <Save size={14} className="mr-1" />Save
+          </Button>
+          <ConfirmAction
+            title="Delete group?"
+            description={`This removes "${group.group_name}". Students in it will become unassigned.`}
+            confirmLabel="Delete group"
+            destructive
+            onConfirm={remove}
+          >
+            <Button size="sm" variant="destructive">
+              <Trash2 size={14} className="mr-1" />Delete
+            </Button>
+          </ConfirmAction>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+type ContactMessage = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  subject: string;
+  message: string;
+  sender_user_id?: string | null;
+  status: "unread" | "read";
+  admin_reply?: string | null;
+  replied_at?: string | null;
+  replied_by?: string | null;
+  created_at: string;
+};
+
+function ContactMessagesAdmin() {
+  const qc = useQueryClient();
+  const [query, setQuery] = useState("");
+
+  const { data = [], isLoading } = useQuery({
+    queryKey: ["admin", "contact_messages"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contact_messages" as any)
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as ContactMessage[];
+    },
+  });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin:contact_messages")
+      .on("postgres_changes", { event: "*", schema: "public", table: "contact_messages" }, () => {
+        qc.invalidateQueries({ queryKey: ["admin", "contact_messages"] });
+        qc.invalidateQueries({ queryKey: ["admin", "dashboard"] });
+      })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["admin", "contact_messages"] });
+    qc.invalidateQueries({ queryKey: ["admin", "dashboard"] });
+  };
+
+  const filtered = data.filter((item) => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return true;
+    return [item.name, item.email, item.phone, item.subject, item.message]
+      .filter(Boolean)
+      .some((value) => value.toLowerCase().includes(needle));
+  });
+
+  const markStatus = async (id: string, status: "unread" | "read") => {
+    const { error } = await supabase.from("contact_messages" as any).update({ status }).eq("id", id);
+    if (error) return toast.error("Status update failed", { description: error.message });
+    toast.success(status === "read" ? "Message marked as read" : "Message marked as unread");
+    refresh();
+  };
+
+  const remove = async (item: ContactMessage) => {
+    const { error } = await supabase.from("contact_messages" as any).delete().eq("id", item.id);
+    if (error) return toast.error("Delete failed", { description: error.message });
+    toast.success("Message deleted", { description: `${item.name} - ${item.subject}` });
+    refresh();
+  };
+
+  const unread = data.filter((item) => item.status === "unread").length;
+
+  return (
+    <div className="space-y-5">
+      <div className="grid sm:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="pt-5">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Total Messages</p>
+            <p className="font-serif text-3xl font-bold text-navy-deep mt-1">{data.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Unread</p>
+            <p className="font-serif text-3xl font-bold text-gold mt-1">{unread}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Read</p>
+            <p className="font-serif text-3xl font-bold text-navy-deep mt-1">{data.length - unread}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardContent className="pt-6 space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <h3 className="font-serif text-xl font-semibold text-navy-deep">Contact Form Messages</h3>
+              <p className="text-sm text-muted-foreground">Messages submitted from the public contact page.</p>
+            </div>
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search messages..."
+              className="md:max-w-xs"
+            />
+          </div>
+
+          {isLoading ? (
+            <p className="py-8 text-sm text-muted-foreground">Loading messages...</p>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-secondary/30 p-10 text-center">
+              <MessageSquare className="mx-auto mb-3 text-muted-foreground/70" size={30} />
+              <p className="font-semibold text-navy-deep">No messages found</p>
+              <p className="text-sm text-muted-foreground">New contact form submissions will appear here.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((item) => (
+                <AdminMessageCard
+                  key={item.id}
+                  item={item}
+                  onReplySaved={refresh}
+                  onToggleStatus={() => markStatus(item.id, item.status === "read" ? "unread" : "read")}
+                  onDelete={() => remove(item)}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function AdminMessageCard({
+  item,
+  onReplySaved,
+  onToggleStatus,
+  onDelete,
+}: {
+  item: ContactMessage;
+  onReplySaved: () => void;
+  onToggleStatus: () => void;
+  onDelete: () => void;
+}) {
+  const [reply, setReply] = useState(item.admin_reply ?? "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setReply(item.admin_reply ?? "");
+  }, [item.admin_reply]);
+
+  const saveReply = async () => {
+    if (!reply.trim()) return toast.error("Reply message is required.");
+    setSaving(true);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const { error } = await supabase
+      .from("contact_messages" as any)
+      .update({
+        admin_reply: reply.trim(),
+        replied_at: new Date().toISOString(),
+        replied_by: sessionData.session?.user.id ?? null,
+        status: "read",
+      })
+      .eq("id", item.id);
+    setSaving(false);
+    if (error) return toast.error("Reply could not be saved", { description: error.message });
+    toast.success("Reply saved", { description: item.sender_user_id ? "The student can now see it in their dashboard." : "Reply saved on this message." });
+    onReplySaved();
+  };
+
+  return (
+    <div className="rounded-xl border border-border bg-background p-4">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-semibold text-navy-deep">{item.name}</p>
+            <span className={item.status === "unread" ? "rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-navy-deep" : "rounded-full bg-secondary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground"}>
+              {item.status}
+            </span>
+            {item.sender_user_id && (
+              <span className="rounded-full bg-navy-deep/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-navy-deep">
+                Student dashboard
+              </span>
+            )}
+            {item.admin_reply && (
+              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                Replied
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground">{formatDate(item.created_at)}</span>
+          </div>
+          <p className="mt-1 text-sm font-medium text-navy-deep">{formatMessageSubject(item.subject)}</p>
+          <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-foreground/75">{item.message}</p>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <a href={`mailto:${item.email}`} className="inline-flex items-center gap-1 hover:text-gold">
+              <Mail size={13} /> {item.email}
+            </a>
+            <a href={`tel:${item.phone}`} className="inline-flex items-center gap-1 hover:text-gold">
+              <PhoneCall size={13} /> {item.phone}
+            </a>
+          </div>
+          <div className="mt-4 rounded-lg border border-border bg-secondary/30 p-3">
+            <Label className="text-xs">Admin Reply</Label>
+            <Textarea
+              value={reply}
+              onChange={(event) => setReply(event.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder="Write a reply the student can see in their dashboard..."
+              className="mt-2 bg-background"
+            />
+            {item.replied_at && (
+              <p className="mt-2 text-xs text-muted-foreground">Last replied: {formatDate(item.replied_at)}</p>
+            )}
+            <Button size="sm" className="mt-3 bg-navy-deep text-cream hover:bg-navy" disabled={saving} onClick={saveReply}>
+              {saving ? "Saving..." : "Save Reply"}
+            </Button>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 lg:justify-end">
+          <Button asChild size="sm" variant="outline">
+            <a href={`mailto:${item.email}?subject=${encodeURIComponent(`Re: ${formatMessageSubject(item.subject)}`)}`}>
+              Email
+            </a>
+          </Button>
+          <Button size="sm" variant="outline" onClick={onToggleStatus}>
+            Mark {item.status === "read" ? "unread" : "read"}
+          </Button>
+          <ConfirmAction
+            title="Delete message?"
+            description={`This will permanently remove the message from ${item.name}.`}
+            confirmLabel="Delete message"
+            destructive
+            onConfirm={onDelete}
+          >
+            <Button size="sm" variant="destructive">
+              <Trash2 size={14} className="mr-1" />Delete
+            </Button>
+          </ConfirmAction>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatMessageSubject(value: string) {
+  const labels: Record<string, string> = {
+    student: "Student Query",
+    resources: "Resource Access",
+    assignment: "Assignment / Deadline",
+    general: "General Enquiry",
+    research: "Research Collaboration",
+    supervision: "Supervision Interest",
+  };
+  return labels[value] ?? value;
+}
+
+function UsersAdmin({ currentUserId }: { currentUserId: string }) {
+  const qc = useQueryClient();
+  const { data: groups = [], isLoading: groupsLoading, error: groupsError } = useStudentGroups();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<"student" | "admin" | "user">("student");
+  const [search, setSearch] = useState("");
+  const [groupFilter, setGroupFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [confirmedFilter, setConfirmedFilter] = useState("all");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [expandedIds, setExpandedIds] = useState<string[]>([]);
+  const [bulkGroup, setBulkGroup] = useState("unassigned");
+  const [busy, setBusy] = useState(false);
+
+  const { data: usersData = EMPTY_ADMIN_USERS, isLoading, error: usersError } = useQuery({
+    queryKey: ["admin", "users"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.rpc as any)("admin_list_users");
+      if (error) throw error;
+      return (data ?? []) as AdminUser[];
+    },
+  });
+  const data = Array.isArray(usersData) ? usersData : EMPTY_ADMIN_USERS;
+
+  const refresh = async () => {
+    await qc.invalidateQueries({ queryKey: ["admin", "users"] });
+  };
+
+  const filteredUsers = data.filter((user) => {
+    const q = search.trim().toLowerCase();
+    if (q && ![user.email, user.first_name, user.last_name, user.group_name, user.organization_name, user.program].some((value) => String(value ?? "").toLowerCase().includes(q))) return false;
+    if (groupFilter !== "all" && (user.group_id ?? "unassigned") !== groupFilter) return false;
+    if (statusFilter !== "all" && user.status !== statusFilter) return false;
+    if (roleFilter !== "all" && user.role !== roleFilter) return false;
+    if (confirmedFilter !== "all" && String(Boolean(user.confirmed)) !== confirmedFilter) return false;
+    return true;
+  });
+  const selectableUsers = filteredUsers.filter((user) => user.id !== currentUserId);
+  const selectedUsers = data.filter((user) => selectedIds.includes(user.id) && user.id !== currentUserId);
+  const allVisibleSelected = selectableUsers.length > 0 && selectableUsers.every((user) => selectedIds.includes(user.id));
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((ids) => ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]);
+  };
+
+  const toggleAllVisible = () => {
+    setSelectedIds((ids) => {
+      const visible = selectableUsers.map((user) => user.id);
+      if (visible.length === 0) return ids;
+      if (visible.every((id) => ids.includes(id))) return ids.filter((id) => !visible.includes(id));
+      return Array.from(new Set([...ids, ...visible]));
+    });
+  };
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((ids) => ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]);
+  };
 
   const createUser = async () => {
     if (!email.trim()) return toast.error("Email is required.");
@@ -1182,23 +1869,65 @@ function UsersAdmin({ currentUserId }: { currentUserId: string }) {
 
   const setUserRole = async (id: string, nextRole: string) => {
     const { error } = await (supabase.rpc as any)("admin_set_user_role", { target_user_id: id, new_role: nextRole });
-    if (error) toast.error(error.message); else { toast.success("Role updated"); refresh(); }
+    if (error) toast.error(error.message); else { await refresh(); toast.success("Role updated"); }
   };
 
-  const setUserStatus = async (id: string, nextStatus: string) => {
-    const reason = nextStatus === "active" ? "" : prompt(`Reason for ${nextStatus}?`) ?? "";
+  const setUserStatus = async (id: string, nextStatus: string, reason = "") => {
     const { error } = await (supabase.rpc as any)("admin_set_user_status", {
       target_user_id: id,
       new_status: nextStatus,
       status_reason: reason,
     });
-    if (error) toast.error(error.message); else { toast.success("Status updated"); refresh(); }
+    if (error) toast.error("Status update failed", { description: error.message }); else { await refresh(); toast.success("Status updated", { description: `User is now ${nextStatus}.` }); }
+  };
+
+  const setUserGroup = async (id: string, groupId: string) => {
+    const toastId = toast.loading("Updating group...");
+    const { error } = await (supabase.rpc as any)("admin_set_user_group", {
+      target_user_id: id,
+      target_group_id: groupId === "unassigned" ? null : groupId,
+    });
+    if (error) return toast.error("Group update failed", { id: toastId, description: error.message });
+    await refresh();
+    toast.success("Group updated", { id: toastId });
   };
 
   const deleteUser = async (id: string, userEmail: string) => {
-    if (!confirm(`Delete ${userEmail}? This removes their login account.`)) return;
     const { error } = await (supabase.rpc as any)("admin_delete_user", { target_user_id: id });
-    if (error) toast.error(error.message); else { toast.success("User deleted"); refresh(); }
+    if (error) toast.error("Delete failed", { description: error.message }); else { await refresh(); toast.success("User deleted", { description: userEmail }); }
+  };
+
+  const bulkSetStatus = async (nextStatus: "active" | "suspended" | "blocked") => {
+    if (selectedUsers.length === 0) return toast.error("Select at least one user.");
+    const toastId = toast.loading("Updating selected users...");
+    const results = await Promise.all(selectedUsers.map((user) =>
+      (supabase.rpc as any)("admin_set_user_status", {
+        target_user_id: user.id,
+        new_status: nextStatus,
+        status_reason: nextStatus === "active" ? "" : `Bulk ${nextStatus} by admin`,
+      })
+    ));
+    const failed = results.find((result) => result.error);
+    if (failed?.error) return toast.error("Bulk update failed", { id: toastId, description: failed.error.message });
+    toast.success(`${selectedUsers.length} user${selectedUsers.length === 1 ? "" : "s"} updated`, { id: toastId });
+    setSelectedIds([]);
+    await refresh();
+  };
+
+  const bulkSetGroup = async () => {
+    if (selectedUsers.length === 0) return toast.error("Select at least one user.");
+    const toastId = toast.loading("Assigning selected users...");
+    const results = await Promise.all(selectedUsers.map((user) =>
+      (supabase.rpc as any)("admin_set_user_group", {
+        target_user_id: user.id,
+        target_group_id: bulkGroup === "unassigned" ? null : bulkGroup,
+      })
+    ));
+    const failed = results.find((result) => result.error);
+    if (failed?.error) return toast.error("Group assignment failed", { id: toastId, description: failed.error.message });
+    toast.success(`${selectedUsers.length} user${selectedUsers.length === 1 ? "" : "s"} assigned`, { id: toastId });
+    setSelectedIds([]);
+    await refresh();
   };
 
   return (
@@ -1235,61 +1964,410 @@ function UsersAdmin({ currentUserId }: { currentUserId: string }) {
 
       <Card>
         <CardContent className="pt-6">
-          <h3 className="font-serif text-xl font-semibold text-navy-deep mb-4">Site Users</h3>
-          {isLoading ? (
+          <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h3 className="font-serif text-xl font-semibold text-navy-deep">Site Users</h3>
+              <p className="text-sm text-muted-foreground">
+                {filteredUsers.length} shown from {data.length} total · {selectedUsers.length} selected
+              </p>
+              {groupsError && (
+                <p className="mt-1 text-xs text-destructive">
+                  Groups could not load: {groupsError instanceof Error ? groupsError.message : "Refresh this section."}
+                </p>
+              )}
+            </div>
+            {(search || groupFilter !== "all" || statusFilter !== "all" || roleFilter !== "all" || confirmedFilter !== "all") && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setSearch("");
+                  setGroupFilter("all");
+                  setStatusFilter("all");
+                  setRoleFilter("all");
+                  setConfirmedFilter("all");
+                }}
+              >
+                Clear Filters
+              </Button>
+            )}
+          </div>
+
+          <div className="mb-4 grid md:grid-cols-5 gap-3">
+            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, email, group, program..." className="md:col-span-2" />
+            <select value={groupFilter} onChange={(event) => setGroupFilter(event.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+              <option value="all">{groupsLoading ? "Loading groups..." : "All groups"}</option>
+              <option value="unassigned">Unassigned</option>
+              {groups.map((group) => <option key={group.id} value={group.id}>{group.group_name}</option>)}
+            </select>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+              <option value="all">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
+              <option value="blocked">Blocked</option>
+            </select>
+            <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+              <option value="all">All roles</option>
+              <option value="admin">Admin</option>
+              <option value="student">Student</option>
+              <option value="user">User</option>
+            </select>
+            <select value={confirmedFilter} onChange={(event) => setConfirmedFilter(event.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+              <option value="all">All confirmations</option>
+              <option value="true">Confirmed</option>
+              <option value="false">Unconfirmed</option>
+            </select>
+          </div>
+
+          <div className="mb-4 rounded-lg border border-border bg-secondary/30 p-3">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Bulk actions</p>
+                <p className="text-sm text-navy-deep">{selectedUsers.length} selectable user{selectedUsers.length === 1 ? "" : "s"} selected</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" disabled={selectedUsers.length === 0} onClick={() => bulkSetStatus("active")}>
+                  Activate
+                </Button>
+                <Button type="button" size="sm" variant="outline" disabled={selectedUsers.length === 0} onClick={() => bulkSetStatus("suspended")}>
+                  Suspend
+                </Button>
+                <Button type="button" size="sm" variant="outline" disabled={selectedUsers.length === 0} onClick={() => bulkSetStatus("blocked")}>
+                  Block Resources
+                </Button>
+                <select value={bulkGroup} onChange={(event) => setBulkGroup(event.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm">
+                  <option value="unassigned">{groupsLoading ? "Loading groups..." : "Unassigned"}</option>
+                  {groups.map((group) => <option key={group.id} value={group.id}>{group.group_name}</option>)}
+                </select>
+                <Button type="button" size="sm" className="bg-navy-deep text-cream hover:bg-navy" disabled={selectedUsers.length === 0} onClick={bulkSetGroup}>
+                  Assign Group
+                </Button>
+                {selectedUsers.length > 0 && (
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedIds([])}>
+                    Clear Selection
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {usersError ? (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5">
+              <p className="font-semibold text-destructive">Could not load users</p>
+              <p className="mt-1 text-sm text-muted-foreground">{usersError instanceof Error ? usersError.message : "Please try refreshing this section."}</p>
+            </div>
+          ) : isLoading ? (
             <p className="text-muted-foreground">Loading users...</p>
+          ) : filteredUsers.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-secondary/30 p-10 text-center">
+              <Users className="mx-auto mb-3 text-muted-foreground/70" size={30} />
+              <p className="font-semibold text-navy-deep">No users match these filters</p>
+              <p className="text-sm text-muted-foreground">Adjust the filters or search term to widen the list.</p>
+            </div>
           ) : (
-            <div className="space-y-3">
-              {data.map((u) => (
-                <div key={u.id} className="border rounded-lg p-4 bg-background space-y-3">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-navy-deep">
-                        {[u.first_name, u.last_name].filter(Boolean).join(" ") || u.email}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Role: {u.role} · Status: {u.status} · {u.confirmed ? "Confirmed" : "Unconfirmed"}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {u.email}
-                        {u.organization_name ? ` · ${u.organization_name}` : ""}
-                        {u.education_level ? ` · ${formatEducationLevel(u.education_level)}` : ""}
-                        {u.program ? ` · ${u.program}` : ""}
-                      </p>
-                      {u.reason && <p className="text-xs text-destructive mt-1">Reason: {u.reason}</p>}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {["admin", "student", "user"].map((r) => (
-                        <Button key={r} size="sm" variant={u.role === r ? "default" : "outline"} onClick={() => setUserRole(u.id, r)}
-                          disabled={u.id === currentUserId && r !== "admin"}
-                          className={u.role === r ? "bg-navy-deep text-cream hover:bg-navy" : ""}>
-                          {r}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant={u.status === "active" ? "default" : "outline"} onClick={() => setUserStatus(u.id, "active")}
-                      className={u.status === "active" ? "bg-gold text-navy-deep hover:bg-gold-soft" : ""}>
-                      Active
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setUserStatus(u.id, "suspended")} disabled={u.id === currentUserId}>
-                      Suspend
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setUserStatus(u.id, "blocked")} disabled={u.id === currentUserId}>
-                      Block Resources
-                    </Button>
-                    <Button size="sm" variant="destructive" onClick={() => deleteUser(u.id, u.email)} disabled={u.id === currentUserId}>
-                      <Trash2 size={14} className="mr-1" />Delete
-                    </Button>
-                  </div>
-                </div>
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <table className="w-full min-w-[980px] text-sm">
+                <thead className="bg-secondary/70 text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                  <tr>
+                    <th className="w-10 px-3 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleAllVisible}
+                        aria-label="Select all visible users"
+                      />
+                    </th>
+                    <th className="px-3 py-3 text-left">User</th>
+                    <th className="px-3 py-3 text-left">Role</th>
+                    <th className="px-3 py-3 text-left">Status</th>
+                    <th className="px-3 py-3 text-left">Group</th>
+                    <th className="px-3 py-3 text-left">Joined</th>
+                    <th className="px-3 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border bg-background">
+              {filteredUsers.map((u) => (
+                <UserTableRows
+                  key={u.id}
+                  user={u}
+                  groups={groups}
+                  currentUserId={currentUserId}
+                  selected={selectedIds.includes(u.id)}
+                  expanded={expandedIds.includes(u.id)}
+                  onSelect={() => toggleSelected(u.id)}
+                  onExpand={() => toggleExpanded(u.id)}
+                  setUserRole={setUserRole}
+                  setUserStatus={setUserStatus}
+                  setUserGroup={setUserGroup}
+                  deleteUser={deleteUser}
+                />
               ))}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function UserTableRows({
+  user,
+  groups,
+  currentUserId,
+  selected,
+  expanded,
+  onSelect,
+  onExpand,
+  setUserRole,
+  setUserStatus,
+  setUserGroup,
+  deleteUser,
+}: {
+  user: AdminUser;
+  groups: StudentGroup[];
+  currentUserId: string;
+  selected: boolean;
+  expanded: boolean;
+  onSelect: () => void;
+  onExpand: () => void;
+  setUserRole: (id: string, nextRole: string) => void | Promise<void>;
+  setUserStatus: (id: string, nextStatus: string, reason?: string) => void | Promise<void>;
+  setUserGroup: (id: string, groupId: string) => void | Promise<void>;
+  deleteUser: (id: string, userEmail: string) => void | Promise<void>;
+}) {
+  const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ") || user.email || "Unnamed user";
+  const isCurrentUser = user.id === currentUserId;
+
+  return (
+    <>
+      <tr className={cn("transition-colors hover:bg-secondary/30", selected && "bg-gold/5")}>
+        <td className="px-3 py-3 align-middle">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onSelect}
+            disabled={isCurrentUser}
+            aria-label={`Select ${user.email}`}
+          />
+        </td>
+        <td className="px-3 py-3 align-middle">
+          <button type="button" onClick={onExpand} className="flex min-w-0 items-center gap-2 text-left">
+            <ChevronDown size={15} className={cn("shrink-0 text-muted-foreground transition-transform", expanded && "rotate-180")} />
+            <span className="min-w-0">
+              <span className="block font-semibold text-navy-deep">{fullName}</span>
+              <span className="block max-w-[260px] truncate text-xs text-muted-foreground">{user.email}</span>
+            </span>
+          </button>
+        </td>
+        <td className="px-3 py-3 align-middle">
+          <span className="rounded-full bg-secondary px-2 py-1 text-xs font-semibold capitalize text-navy-deep">{user.role}</span>
+        </td>
+        <td className="px-3 py-3 align-middle">
+          <span className={cn("rounded-full px-2 py-1 text-xs font-semibold capitalize", userStatusClass(user.status))}>
+            {user.status}
+          </span>
+        </td>
+        <td className="px-3 py-3 align-middle">
+          <select
+            value={user.group_id ?? "unassigned"}
+            onChange={(event) => setUserGroup(user.id, event.target.value)}
+            onClick={(event) => event.stopPropagation()}
+            className="h-9 w-full min-w-[180px] rounded-md border border-input bg-background px-2 text-xs text-navy-deep outline-none focus:ring-2 focus:ring-gold/40"
+            aria-label={`Assign group for ${user.email}`}
+          >
+            <option value="unassigned">Unassigned</option>
+            {groups.map((group) => <option key={group.id} value={group.id}>{group.group_name}</option>)}
+          </select>
+        </td>
+        <td className="px-3 py-3 align-middle text-xs text-muted-foreground">{formatDate(user.created_at)}</td>
+        <td className="px-3 py-3 align-middle text-right">
+          <div className="flex justify-end gap-2">
+            {user.status === "pending" && (
+              <Button size="sm" className="bg-gold text-navy-deep hover:bg-gold-soft" onClick={() => setUserStatus(user.id, "active", "")}>
+                Approve
+              </Button>
+            )}
+            <Button type="button" size="sm" variant="outline" onClick={onExpand}>
+              {expanded ? "Hide" : "Details"}
+            </Button>
+          </div>
+        </td>
+      </tr>
+      {expanded && (
+        <tr className="bg-secondary/20">
+          <td colSpan={7} className="px-4 py-4">
+            <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr_1.2fr]">
+              <div className="rounded-lg border border-border bg-background p-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Profile</p>
+                <div className="grid gap-2 text-sm">
+                  <UserDetail label="Email" value={user.email} />
+                  <UserDetail label="Organization" value={user.organization_name} />
+                  <UserDetail label="Education" value={user.education_level ? formatEducationLevel(user.education_level) : ""} />
+                  <UserDetail label="Program" value={user.program} />
+                  <UserDetail label="Confirmed" value={user.confirmed ? "Confirmed" : "Unconfirmed"} />
+                  <UserDetail label="Last sign in" value={user.last_sign_in_at ? formatDate(user.last_sign_in_at) : "Never"} />
+                  {user.reason && <UserDetail label="Reason" value={user.reason} tone="danger" />}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Role & Group</p>
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {["admin", "student", "user"].map((role) => (
+                      <Button
+                        key={role}
+                        size="sm"
+                        variant={user.role === role ? "default" : "outline"}
+                        onClick={() => setUserRole(user.id, role)}
+                        disabled={isCurrentUser && role !== "admin"}
+                        className={user.role === role ? "bg-navy-deep text-cream hover:bg-navy" : ""}
+                      >
+                        {role}
+                      </Button>
+                    ))}
+                  </div>
+                  <div>
+                    <Label className="text-xs">Assigned Group</Label>
+                    <select
+                      value={user.group_id ?? "unassigned"}
+                      onChange={(event) => setUserGroup(user.id, event.target.value)}
+                      className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="unassigned">Unassigned</option>
+                      {groups.map((group) => <option key={group.id} value={group.id}>{group.group_name}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Account Actions</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant={user.status === "active" ? "default" : "outline"}
+                    onClick={() => setUserStatus(user.id, "active", "")}
+                    className={user.status === "active" ? "bg-gold text-navy-deep hover:bg-gold-soft" : ""}
+                  >
+                    Active
+                  </Button>
+                  <UserStatusAction
+                    label="Suspend"
+                    userEmail={user.email}
+                    status="suspended"
+                    disabled={isCurrentUser}
+                    onConfirm={(reason) => setUserStatus(user.id, "suspended", reason)}
+                  />
+                  <UserStatusAction
+                    label="Block Resources"
+                    userEmail={user.email}
+                    status="blocked"
+                    disabled={isCurrentUser}
+                    onConfirm={(reason) => setUserStatus(user.id, "blocked", reason)}
+                  />
+                  <ConfirmAction
+                    title="Delete user?"
+                    description={`This will remove ${user.email}'s login account. This action cannot be undone.`}
+                    confirmLabel="Delete user"
+                    destructive
+                    onConfirm={() => deleteUser(user.id, user.email)}
+                  >
+                    <Button size="sm" variant="destructive" disabled={isCurrentUser}>
+                      <Trash2 size={14} className="mr-1" />Delete
+                    </Button>
+                  </ConfirmAction>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function UserDetail({ label, value, tone }: { label: string; value?: string | null; tone?: "danger" }) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+      <p className={cn("text-sm text-navy-deep", tone === "danger" && "text-destructive")}>{value || "Not provided"}</p>
+    </div>
+  );
+}
+
+function userStatusClass(status: AdminUser["status"]) {
+  if (status === "active") return "bg-emerald-500/10 text-emerald-700";
+  if (status === "pending") return "bg-gold/15 text-navy-deep";
+  if (status === "suspended") return "bg-amber-500/10 text-amber-700";
+  return "bg-destructive/10 text-destructive";
+}
+
+function UserStatusAction({
+  label,
+  userEmail,
+  status,
+  disabled,
+  onConfirm,
+}: {
+  label: string;
+  userEmail: string;
+  status: "suspended" | "blocked";
+  disabled?: boolean;
+  onConfirm: (reason: string) => void | Promise<void>;
+}) {
+  const [reason, setReason] = useState("");
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button size="sm" variant="outline" disabled={disabled}>{label}</Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent className="max-w-md overflow-hidden rounded-2xl border-border p-0 shadow-2xl shadow-navy-deep/20">
+        <div className="border-b border-border bg-secondary/50 px-6 py-5">
+          <AlertDialogHeader className="space-y-2 text-left">
+            <AlertDialogTitle className="font-serif text-xl text-navy-deep">
+              {status === "blocked" ? "Block resource access?" : "Suspend user?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="leading-relaxed">
+              This will mark {userEmail} as {status}. Add a short reason for admin records.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+        </div>
+        <div className="px-6 py-4">
+          <Label htmlFor={`reason-${status}-${userEmail}`}>Reason</Label>
+          <Textarea
+            id={`reason-${status}-${userEmail}`}
+            rows={3}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder={status === "blocked" ? "e.g. Resource misuse" : "e.g. Account review pending"}
+            maxLength={300}
+          />
+        </div>
+        <AlertDialogFooter className="gap-2 px-6 py-4 sm:space-x-0">
+          <AlertDialogCancel asChild>
+            <Button type="button" variant="outline">Cancel</Button>
+          </AlertDialogCancel>
+          <AlertDialogAction asChild>
+            <Button
+              type="button"
+              className="bg-navy-deep text-cream hover:bg-navy"
+              onClick={() => {
+                onConfirm(reason.trim());
+                setReason("");
+              }}
+            >
+              Confirm
+            </Button>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -1310,7 +2388,7 @@ function BlogsAdmin() {
   const invalidate = () => { qc.invalidateQueries({ queryKey: ["admin", "blog_posts"] }); qc.invalidateQueries({ queryKey: ["blogs"] }); };
 
   const add = async () => {
-    const title = "New blog post";
+    const title = "New insight";
     const slug = `${slugify(title)}-${Date.now()}`;
     const { error } = await supabase.from("blog_posts" as any).insert({
       title,
@@ -1328,22 +2406,22 @@ function BlogsAdmin() {
       <CardContent className="pt-6">
         <div className="flex justify-between items-center mb-4 gap-3 flex-wrap">
           <div>
-            <h3 className="font-serif text-xl font-semibold text-navy-deep">Blog Writer</h3>
-            <p className="text-sm text-muted-foreground mt-1">Write rich posts with formatted text, images, links, and call-to-action buttons.</p>
+            <h3 className="font-serif text-xl font-semibold text-navy-deep">Insight Writer</h3>
+            <p className="text-sm text-muted-foreground mt-1">Write rich insights with formatted text, images, links, and call-to-action buttons.</p>
           </div>
           <Button size="sm" onClick={add} className="bg-gold text-navy-deep hover:bg-gold-soft">
-            <Plus size={14} className="mr-1" />New Post
+            <Plus size={14} className="mr-1" />New Insight
           </Button>
         </div>
         {isLoading ? (
-          <p className="text-muted-foreground">Loading posts...</p>
+          <p className="text-muted-foreground">Loading insights...</p>
         ) : (
           <div className="space-y-4">
             {(data ?? []).map((b: any) => (
               <BlogPostEditor key={b.id} post={b} onSaved={invalidate} />
             ))}
             {(data ?? []).length === 0 && (
-              <p className="text-sm text-muted-foreground italic">No blog posts yet.</p>
+              <p className="text-sm text-muted-foreground italic">No insights yet.</p>
             )}
           </div>
         )}
@@ -1449,16 +2527,15 @@ function BlogPostEditor({ post, onSaved }: { post: BlogPost; onSaved: () => void
     };
     const { error } = await supabase.from("blog_posts" as any).update(payload).eq("id", form.id);
     setBusy(false);
-    if (error) return toast.error(error.message);
-    toast.success("Blog post saved");
+    if (error) return toast.error("Save failed", { id: toastId, description: error.message });
+    toast.success("Insight saved", { id: toastId, description: form.status === "published" ? "Published content is now updated." : "Draft changes were saved." });
     onSaved();
   };
 
   const remove = async () => {
-    if (!confirm(`Delete "${form.title}"?`)) return;
     const { error } = await supabase.from("blog_posts" as any).delete().eq("id", form.id);
-    if (error) return toast.error(error.message);
-    toast.success("Blog post deleted");
+    if (error) return toast.error("Delete failed", { description: error.message });
+    toast.success("Insight deleted", { description: form.title });
     onSaved();
   };
 
@@ -1553,7 +2630,7 @@ function BlogPostEditor({ post, onSaved }: { post: BlogPost; onSaved: () => void
         contentEditable
         suppressContentEditableWarning
         onInput={syncContent}
-        data-placeholder="Start writing the blog post here..."
+        data-placeholder="Start writing the insight here..."
         className="blog-editor-content min-h-[520px] p-6 md:p-10 bg-white text-foreground leading-relaxed focus:outline-none"
         style={{ fontFamily: "Inter, system-ui, sans-serif" }}
       />
@@ -1566,9 +2643,17 @@ function BlogPostEditor({ post, onSaved }: { post: BlogPost; onSaved: () => void
           <Button size="sm" onClick={save} disabled={busy} className="bg-navy-deep hover:bg-navy text-cream">
             <Save size={14} className="mr-1" />{busy ? "Saving..." : "Save Post"}
           </Button>
-          <Button size="sm" variant="destructive" onClick={remove}>
-            <Trash2 size={14} className="mr-1" />Delete
-          </Button>
+          <ConfirmAction
+            title="Delete insight?"
+            description={`This will permanently remove "${form.title}".`}
+            confirmLabel="Delete insight"
+            destructive
+            onConfirm={remove}
+          >
+            <Button size="sm" variant="destructive">
+              <Trash2 size={14} className="mr-1" />Delete
+            </Button>
+          </ConfirmAction>
         </div>
       </div>
     </div>
@@ -1585,6 +2670,42 @@ function ToolbarButton({ label, onClick, children }: { label: string; onClick: (
 }
 
 type RowField = { name: string; label: string; textarea?: boolean; number?: boolean };
+
+class SectionErrorBoundary extends Component<
+  { section: string; children: ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error(`${this.props.section} section failed`, error);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5">
+              <h3 className="font-serif text-xl font-semibold text-destructive">{this.props.section} could not load</h3>
+              <p className="mt-2 text-sm text-muted-foreground">{this.state.error.message}</p>
+              <Button type="button" className="mt-4" variant="outline" onClick={() => this.setState({ error: null })}>
+                Try again
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 function RowEditor({
   table, row, fields, onChange, fileField, fileBucket,
 }: { table: string; row: any; fields: RowField[]; onChange: () => void; fileField?: string; fileBucket?: string }) {
@@ -1594,16 +2715,18 @@ function RowEditor({
 
   const save = async () => {
     setBusy(true);
+    const toastId = toast.loading("Saving item...", {
+      description: "Updating this section.",
+    });
     const payload: any = { ...form };
     delete payload.id; delete payload.created_at;
     const { error } = await supabase.from(table as any).update(payload).eq("id", row.id);
     setBusy(false);
-    if (error) toast.error(error.message); else { toast.success("Saved"); onChange(); }
+    if (error) toast.error("Save failed", { id: toastId, description: error.message }); else { toast.success("Item saved", { id: toastId }); onChange(); }
   };
   const remove = async () => {
-    if (!confirm("Delete this item?")) return;
     const { error } = await supabase.from(table as any).delete().eq("id", row.id);
-    if (error) toast.error(error.message); else { toast.success("Deleted"); onChange(); }
+    if (error) toast.error("Delete failed", { description: error.message }); else { toast.success("Item deleted"); onChange(); }
   };
   const upload = async (file: File) => {
     if (!fileField || !fileBucket) return;
@@ -1641,7 +2764,15 @@ function RowEditor({
       )}
       <div className="flex gap-2">
         <Button size="sm" onClick={save} disabled={busy} className="bg-navy-deep hover:bg-navy text-cream"><Save size={14} className="mr-1" />Save</Button>
-        <Button size="sm" variant="destructive" onClick={remove}><Trash2 size={14} className="mr-1" />Delete</Button>
+        <ConfirmAction
+          title="Delete item?"
+          description="This will permanently remove this item from the website."
+          confirmLabel="Delete item"
+          destructive
+          onConfirm={remove}
+        >
+          <Button size="sm" variant="destructive"><Trash2 size={14} className="mr-1" />Delete</Button>
+        </ConfirmAction>
       </div>
     </div>
   );

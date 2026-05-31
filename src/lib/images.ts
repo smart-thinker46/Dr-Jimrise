@@ -1,4 +1,4 @@
-export function optimizedImageUrl(src: string, width: number, quality = 72) {
+export function optimizedImageUrl(src: string, width: number, quality = 72, resize: "cover" | "contain" = "cover") {
   if (!src) return src;
 
   try {
@@ -8,13 +8,13 @@ export function optimizedImageUrl(src: string, width: number, quality = 72) {
     url.pathname = url.pathname.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/");
     url.searchParams.set("width", String(width));
     url.searchParams.set("quality", String(quality));
-    url.searchParams.set("resize", "cover");
+    url.searchParams.set("resize", resize);
     return url.toString();
   } catch {
     return src;
   }
 }
 
-export function optimizedImageSrcSet(src: string, widths: number[], quality = 72) {
-  return widths.map((width) => `${optimizedImageUrl(src, width, quality)} ${width}w`).join(", ");
+export function optimizedImageSrcSet(src: string, widths: number[], quality = 72, resize: "cover" | "contain" = "cover") {
+  return widths.map((width) => `${optimizedImageUrl(src, width, quality, resize)} ${width}w`).join(", ");
 }

@@ -64,17 +64,17 @@ function Home() {
       <section className="relative min-h-screen flex items-center bg-navy-deep text-cream overflow-hidden pt-24 pb-16">
         <HeroBackground medium />
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 grid lg:grid-cols-12 gap-10 lg:gap-16 items-center w-full">
-          <div className="lg:col-span-7 animate-fade-in">
-            <p className="text-gold text-xs font-semibold tracking-[0.25em] uppercase mb-5">{hero.tagline}</p>
-            <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold leading-[1.05] text-balance">
+          <div className="lg:col-span-7">
+            <p className="hero-reveal text-gold text-xs font-semibold tracking-[0.25em] uppercase mb-5" style={{ "--hero-delay": "80ms" } as React.CSSProperties}>{hero.tagline}</p>
+            <h1 className="hero-title-reveal font-serif text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold leading-[1.05] text-balance" style={{ "--hero-delay": "190ms" } as React.CSSProperties}>
               {hero.name.split(" ").slice(0, -1).join(" ")} <span className="text-gold">{hero.name.split(" ").slice(-1)}</span>
             </h1>
-            <p className="mt-5 text-lg md:text-xl text-cream/85 font-light">{hero.role}</p>
-            <p className="mt-1 text-sm md:text-base text-cream/65">{hero.institution}</p>
-            <p className="mt-8 max-w-2xl text-base md:text-lg leading-relaxed text-cream/80 border-l-2 border-gold pl-5 italic font-serif">
+            <p className="hero-reveal mt-5 text-lg md:text-xl text-cream/85 font-light" style={{ "--hero-delay": "360ms" } as React.CSSProperties}>{hero.role}</p>
+            <p className="hero-reveal mt-1 text-sm md:text-base text-cream/65" style={{ "--hero-delay": "460ms" } as React.CSSProperties}>{hero.institution}</p>
+            <p className="hero-reveal mt-8 max-w-2xl text-base md:text-lg leading-relaxed text-cream/80 border-l-2 border-gold pl-5 italic font-serif" style={{ "--hero-delay": "580ms" } as React.CSSProperties}>
               “{hero.quote}”
             </p>
-            <div className="mt-10 flex flex-wrap gap-4">
+            <div className="hero-reveal mt-10 flex flex-wrap gap-4" style={{ "--hero-delay": "720ms" } as React.CSSProperties}>
               <Button asChild size="lg" className="bg-gold text-navy-deep hover:bg-gold-soft font-semibold shadow-lg shadow-gold/20">
                 <Link to="/research">View Research <ArrowRight size={18} className="ml-1" /></Link>
               </Button>
@@ -84,15 +84,15 @@ function Home() {
             </div>
           </div>
 
-          <div className="lg:col-span-5 animate-slide-up">
+          <div className="hero-photo-reveal lg:col-span-5" style={{ "--hero-delay": "420ms" } as React.CSSProperties}>
             <div className="relative max-w-md mx-auto">
               <div className="absolute -inset-4 bg-gradient-to-tr from-gold/30 to-transparent rounded-2xl blur-2xl" />
               <div className="absolute -top-3 -left-3 w-24 h-24 border-t-2 border-l-2 border-gold rounded-tl-2xl" />
               <div className="absolute -bottom-3 -right-3 w-24 h-24 border-b-2 border-r-2 border-gold rounded-br-2xl" />
               {hero.photo_url ? (
                 <img
-                  src={optimizedImageUrl(hero.photo_url, 720)}
-                  srcSet={optimizedImageSrcSet(hero.photo_url, [360, 540, 720, 960])}
+                  src={optimizedImageUrl(hero.photo_url, 720, 72, "contain")}
+                  srcSet={optimizedImageSrcSet(hero.photo_url, [360, 540, 720, 960], 72, "contain")}
                   sizes="(min-width: 1024px) 420px, min(100vw - 2rem, 448px)"
                   alt={hero.name}
                   width={720}
@@ -100,7 +100,7 @@ function Home() {
                   loading="eager"
                   decoding="async"
                   fetchPriority="high"
-                  className="relative w-full aspect-[4/5] object-cover rounded-2xl shadow-2xl ring-1 ring-cream/10"
+                  className="relative w-full aspect-[4/5] object-contain rounded-2xl bg-cream/5 shadow-2xl ring-1 ring-cream/10"
                 />
               ) : (
                 <div className="relative w-full aspect-[4/5] rounded-2xl border border-cream/15 bg-cream/5 shadow-2xl ring-1 ring-cream/10" />
@@ -241,7 +241,7 @@ function Home() {
               <CardContent className="pt-6">
                 <div className="flex items-center gap-2 mb-4">
                   <PenLine size={18} className="text-gold" />
-                  <h3 className="font-serif text-lg font-semibold text-navy-deep">Latest Writing</h3>
+                  <h3 className="font-serif text-lg font-semibold text-navy-deep">Latest Insights</h3>
                 </div>
                 <div className="space-y-3">
                   {latestBlogs.length > 0 ? latestBlogs.map((post) => (
@@ -249,7 +249,7 @@ function Home() {
                       <p className="text-sm font-semibold text-navy-deep group-hover:text-gold transition-colors">{post.title}</p>
                       {post.excerpt && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{post.excerpt}</p>}
                     </Link>
-                  )) : <p className="text-sm text-muted-foreground">No published posts yet.</p>}
+                  )) : <p className="text-sm text-muted-foreground">No published insights yet.</p>}
                 </div>
               </CardContent>
             </Card>

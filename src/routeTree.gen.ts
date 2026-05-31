@@ -20,6 +20,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ResourcesIdRouteImport } from './routes/resources.$id'
 import { Route as PublicationsIdRouteImport } from './routes/publications.$id'
 import { Route as BlogsSlugRouteImport } from './routes/blogs.$slug'
 
@@ -78,6 +79,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ResourcesIdRoute = ResourcesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ResourcesRoute,
+} as any)
 const PublicationsIdRoute = PublicationsIdRouteImport.update({
   id: '/publications/$id',
   path: '/publications/$id',
@@ -98,11 +104,12 @@ export interface FileRoutesByFullPath {
   '/contact': typeof ContactRoute
   '/research': typeof ResearchRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/resources': typeof ResourcesRoute
+  '/resources': typeof ResourcesRouteWithChildren
   '/student': typeof StudentRoute
   '/supervision': typeof SupervisionRoute
   '/blogs/$slug': typeof BlogsSlugRoute
   '/publications/$id': typeof PublicationsIdRoute
+  '/resources/$id': typeof ResourcesIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -113,11 +120,12 @@ export interface FileRoutesByTo {
   '/contact': typeof ContactRoute
   '/research': typeof ResearchRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/resources': typeof ResourcesRoute
+  '/resources': typeof ResourcesRouteWithChildren
   '/student': typeof StudentRoute
   '/supervision': typeof SupervisionRoute
   '/blogs/$slug': typeof BlogsSlugRoute
   '/publications/$id': typeof PublicationsIdRoute
+  '/resources/$id': typeof ResourcesIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -129,11 +137,12 @@ export interface FileRoutesById {
   '/contact': typeof ContactRoute
   '/research': typeof ResearchRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/resources': typeof ResourcesRoute
+  '/resources': typeof ResourcesRouteWithChildren
   '/student': typeof StudentRoute
   '/supervision': typeof SupervisionRoute
   '/blogs/$slug': typeof BlogsSlugRoute
   '/publications/$id': typeof PublicationsIdRoute
+  '/resources/$id': typeof ResourcesIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -151,6 +160,7 @@ export interface FileRouteTypes {
     | '/supervision'
     | '/blogs/$slug'
     | '/publications/$id'
+    | '/resources/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
     | '/supervision'
     | '/blogs/$slug'
     | '/publications/$id'
+    | '/resources/$id'
   id:
     | '__root__'
     | '/'
@@ -181,6 +192,7 @@ export interface FileRouteTypes {
     | '/supervision'
     | '/blogs/$slug'
     | '/publications/$id'
+    | '/resources/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -192,7 +204,7 @@ export interface RootRouteChildren {
   ContactRoute: typeof ContactRoute
   ResearchRoute: typeof ResearchRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
-  ResourcesRoute: typeof ResourcesRoute
+  ResourcesRoute: typeof ResourcesRouteWithChildren
   StudentRoute: typeof StudentRoute
   SupervisionRoute: typeof SupervisionRoute
   PublicationsIdRoute: typeof PublicationsIdRoute
@@ -277,6 +289,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/resources/$id': {
+      id: '/resources/$id'
+      path: '/$id'
+      fullPath: '/resources/$id'
+      preLoaderRoute: typeof ResourcesIdRouteImport
+      parentRoute: typeof ResourcesRoute
+    }
     '/publications/$id': {
       id: '/publications/$id'
       path: '/publications/$id'
@@ -304,6 +323,18 @@ const BlogsRouteChildren: BlogsRouteChildren = {
 
 const BlogsRouteWithChildren = BlogsRoute._addFileChildren(BlogsRouteChildren)
 
+interface ResourcesRouteChildren {
+  ResourcesIdRoute: typeof ResourcesIdRoute
+}
+
+const ResourcesRouteChildren: ResourcesRouteChildren = {
+  ResourcesIdRoute: ResourcesIdRoute,
+}
+
+const ResourcesRouteWithChildren = ResourcesRoute._addFileChildren(
+  ResourcesRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
@@ -313,7 +344,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContactRoute: ContactRoute,
   ResearchRoute: ResearchRoute,
   ResetPasswordRoute: ResetPasswordRoute,
-  ResourcesRoute: ResourcesRoute,
+  ResourcesRoute: ResourcesRouteWithChildren,
   StudentRoute: StudentRoute,
   SupervisionRoute: SupervisionRoute,
   PublicationsIdRoute: PublicationsIdRoute,

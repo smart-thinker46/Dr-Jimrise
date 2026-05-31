@@ -51,7 +51,7 @@ export function useUserAccessStatus(user: User | null) {
         .select("status")
         .eq("user_id", user.id)
         .maybeSingle();
-      return ((data as any)?.status ?? "active") as "active" | "suspended" | "blocked";
+      return ((data as any)?.status ?? "active") as "pending" | "active" | "suspended" | "blocked";
     },
     enabled: !!user,
     staleTime: 15_000,

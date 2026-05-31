@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { BookOpen, Building2, ChevronDown, GraduationCap, LogOut, Home, Mail, Pencil, User, ExternalLink, type LucideIcon } from "lucide-react";
+import { BookOpen, Building2, ChevronDown, Eye, EyeOff, GraduationCap, KeyRound, LogOut, Home, Mail, Pencil, User, ExternalLink, type LucideIcon } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -50,7 +50,10 @@ export function DashboardShell({
   const { data: profile, isLoading: profileLoading } = useDashboardProfile(userId);
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [profileForm, setProfileForm] = useState<DashboardProfileForm>(emptyProfileForm);
+  const [passwordForm, setPasswordForm] = useState({ password: "", confirmPassword: "" });
   const [openGroups, setOpenGroups] = useState<string[]>(() =>
     nav.filter((item) => item.children?.some((child) => child.id === active)).map((item) => item.id)
   );
@@ -110,18 +113,32 @@ export function DashboardShell({
     toast.success("Profile updated");
     setEditingProfile(false);
   };
+
+  const changePassword = async () => {
+    if (passwordForm.password.length < 6) return toast.error("Password must be at least 6 characters.");
+    if (passwordForm.password !== passwordForm.confirmPassword) return toast.error("Passwords do not match.");
+
+    setSavingPassword(true);
+    const { error } = await supabase.auth.updateUser({ password: passwordForm.password });
+    setSavingPassword(false);
+
+    if (error) return toast.error("Password update failed", { description: error.message });
+    setPasswordForm({ password: "", confirmPassword: "" });
+    setShowPassword(false);
+    toast.success("Password updated", { description: "Use the new password the next time you sign in." });
+  };
   const initials = getInitials(userEmail ?? roleLabel);
 
   return (
-    <div className="min-h-screen bg-secondary/30 flex">
+    <div className="min-h-[100dvh] bg-secondary/30 flex">
       {/* Sidebar */}
-      <aside className="hidden md:flex w-64 shrink-0 flex-col bg-navy-deep text-cream sticky top-0 h-screen">
-        <Link to="/" className="px-6 py-5 border-b border-cream/10 hover:bg-navy/60 transition-colors">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-navy-deep text-cream md:flex h-[100dvh] max-h-[100dvh] overflow-hidden">
+        <Link to="/" className="shrink-0 px-5 py-4 border-b border-cream/10 hover:bg-navy/60 transition-colors">
           <p className="font-serif text-lg font-bold leading-tight">J. Ochwach</p>
           <p className="text-[10px] tracking-[0.2em] uppercase text-gold mt-0.5">{roleLabel}</p>
         </Link>
 
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 min-h-0 px-2.5 py-3 space-y-1 overflow-y-auto overscroll-contain">
           {nav.map((item) => {
             const Icon = item.icon;
             const hasChildren = Boolean(item.children?.length);
@@ -132,7 +149,7 @@ export function DashboardShell({
                 <button
                   onClick={() => hasChildren ? toggleGroup(item.id) : onSelect(item.id)}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-left",
+                    "w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-left",
                     isActive
                       ? "bg-gold text-navy-deep"
                       : "text-cream/80 hover:text-cream hover:bg-cream/5"
@@ -145,7 +162,7 @@ export function DashboardShell({
                   )}
                 </button>
                 {hasChildren && isOpen && (
-                  <div className="mt-1 ml-5 pl-3 border-l border-cream/15 space-y-1">
+                  <div className="mt-1 ml-5 pl-3 border-l border-cream/15 space-y-0.5">
                     {item.children?.map((child) => {
                       const ChildIcon = child.icon;
                       const isChildActive = child.id === active;
@@ -154,7 +171,7 @@ export function DashboardShell({
                           key={child.id}
                           onClick={() => onSelect(child.id)}
                           className={cn(
-                            "w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors text-left",
+                            "w-full flex items-center gap-2 px-3 py-[5px] rounded-md text-xs font-medium transition-colors text-left",
                             isChildActive
                               ? "bg-cream/95 text-navy-deep"
                               : "text-cream/70 hover:text-cream hover:bg-cream/5"
@@ -172,7 +189,7 @@ export function DashboardShell({
           })}
         </nav>
 
-        <div className="px-3 py-4 border-t border-cream/10 space-y-1">
+        <div className="shrink-0 px-3 py-3 border-t border-cream/10 space-y-1">
           <Link
             to="/"
             className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-cream/80 hover:text-gold hover:bg-cream/5"
@@ -189,7 +206,7 @@ export function DashboardShell({
       </aside>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-[100dvh] md:ml-64">
         <header className="bg-background border-b sticky top-0 z-10">
           <div className="px-4 sm:px-6 lg:px-10 py-4 flex items-center justify-between gap-4">
             <div className="min-w-0">
@@ -288,6 +305,38 @@ export function DashboardShell({
                       <ProfileRow icon={BookOpen} label="Program" value={profile?.program} />
                     </div>
                   )}
+                </div>
+                <DropdownMenuSeparator />
+                <div className="px-3 py-2">
+                  <div className="mb-2 flex items-center gap-2">
+                    <KeyRound size={14} className="text-gold" />
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Password</p>
+                  </div>
+                  <div className="space-y-3 rounded-lg border border-border bg-secondary/40 p-3" onClick={(event) => event.stopPropagation()}>
+                    <PasswordField
+                      label="New Password"
+                      value={passwordForm.password}
+                      show={showPassword}
+                      onChange={(value) => setPasswordForm((form) => ({ ...form, password: value }))}
+                      onToggleShow={() => setShowPassword((show) => !show)}
+                    />
+                    <PasswordField
+                      label="Confirm Password"
+                      value={passwordForm.confirmPassword}
+                      show={showPassword}
+                      onChange={(value) => setPasswordForm((form) => ({ ...form, confirmPassword: value }))}
+                      onToggleShow={() => setShowPassword((show) => !show)}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="w-full bg-navy-deep hover:bg-navy text-cream"
+                      disabled={savingPassword || !passwordForm.password || !passwordForm.confirmPassword}
+                      onClick={changePassword}
+                    >
+                      {savingPassword ? "Updating..." : "Change Password"}
+                    </Button>
+                  </div>
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
@@ -403,6 +452,43 @@ function ProfileField({
     <div>
       <Label className="text-xs">{label}</Label>
       <Input className="mt-1 h-9 text-xs" value={value} onChange={(event) => onChange(event.target.value)} />
+    </div>
+  );
+}
+
+function PasswordField({
+  label,
+  value,
+  show,
+  onChange,
+  onToggleShow,
+}: {
+  label: string;
+  value: string;
+  show: boolean;
+  onChange: (value: string) => void;
+  onToggleShow: () => void;
+}) {
+  return (
+    <div>
+      <Label className="text-xs">{label}</Label>
+      <div className="relative mt-1">
+        <Input
+          type={show ? "text" : "password"}
+          className="h-9 pr-10 text-xs"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          minLength={6}
+        />
+        <button
+          type="button"
+          onClick={onToggleShow}
+          className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-navy-deep"
+          aria-label={show ? "Hide password" : "Show password"}
+        >
+          {show ? <EyeOff size={15} /> : <Eye size={15} />}
+        </button>
+      </div>
     </div>
   );
 }

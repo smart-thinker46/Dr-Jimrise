@@ -36,6 +36,31 @@ export type HomeStatsContent = {
   msc_ongoing: number;
 };
 
+export type StudentGroup = {
+  id: string;
+  group_name: string;
+  description: string;
+  created_at: string;
+};
+
+export type ResourceDirectoryItem = {
+  id: string;
+  title: string;
+  course: string;
+  type: string;
+  date: string;
+  description: string | null;
+  sort_order: number | null;
+  created_at: string;
+  source_type: "file" | "link" | string | null;
+  allow_download: boolean | null;
+  access_level: "public" | "authenticated" | string | null;
+  file_url: string | null;
+  link_url: string | null;
+  can_access: boolean;
+  allowed_groups: string[];
+};
+
 export type BlogPost = {
   id: string;
   title: string;
@@ -47,6 +72,20 @@ export type BlogPost = {
   sort_order: number;
   created_at: string;
   updated_at: string;
+};
+
+export type Publication = {
+  id: string;
+  kind: "journal" | "conference";
+  title: string;
+  authors: string | null;
+  venue: string | null;
+  year: number | null;
+  doi: string | null;
+  article_url?: string | null;
+  pdf_url?: string | null;
+  pdf_download_allowed?: boolean | null;
+  sort_order: number | null;
 };
 
 export function useSiteContent<T>(key: string, fallback: T) {
@@ -86,6 +125,9 @@ export function useAnnouncements() {
       .on("postgres_changes", { event: "*", schema: "public", table: "announcements" }, () => {
         qc.invalidateQueries({ queryKey: ["announcements"] });
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcement_group_access" }, () => {
+        qc.invalidateQueries({ queryKey: ["announcements"] });
+      })
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
@@ -105,7 +147,7 @@ export function useAnnouncements() {
   });
 }
 
-export function useResources() {
+export function useResources(includeActionUrls = true) {
   const qc = useQueryClient();
   useEffect(() => {
     const channel = supabase
@@ -120,15 +162,92 @@ export function useResources() {
   }, [qc]);
 
   return useQuery({
-    queryKey: ["resources"],
+    queryKey: ["resources", includeActionUrls ? "with-urls" : "metadata"],
     queryFn: async () => {
+      const metadataColumns = [
+        "id",
+        "title",
+        "course",
+        "type",
+        "date",
+        "description",
+        "sort_order",
+        "created_at",
+        "source_type",
+        "allow_download",
+        "access_level",
+      ].join(",");
+
+      if (!includeActionUrls) {
+        const [{ data: metadata }, { data: publicActions }] = await Promise.all([
+          supabase.from("resources").select(metadataColumns).order("sort_order", { ascending: true }),
+          supabase.from("resources").select("id,file_url,link_url").eq("access_level", "public"),
+        ]);
+        const actionsById = new Map((publicActions ?? []).map((r: any) => [r.id, r]));
+        return (metadata ?? []).map((r: any) => ({ ...r, ...(actionsById.get(r.id) ?? {}) }));
+      }
+
+      const columns = `${metadataColumns},file_url,link_url`;
       const { data } = await supabase
         .from("resources")
-        .select("*")
+        .select(columns)
         .order("sort_order", { ascending: true });
       return data ?? [];
     },
     initialData: [],
+  });
+}
+
+export function useResourceDirectory() {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const channel = supabase
+      .channel("resource-directory:public")
+      .on("postgres_changes", { event: "*", schema: "public", table: "resources" }, () => {
+        qc.invalidateQueries({ queryKey: ["resource-directory"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "resource_group_access" }, () => {
+        qc.invalidateQueries({ queryKey: ["resource-directory"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "student_groups" }, () => {
+        qc.invalidateQueries({ queryKey: ["resource-directory"] });
+      })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
+  return useQuery({
+    queryKey: ["resource-directory"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("list_resource_directory" as any);
+      if (error) throw error;
+      return (data ?? []) as ResourceDirectoryItem[];
+    },
+    initialData: [],
+    staleTime: 30_000,
+  });
+}
+
+export function useStudentGroups() {
+  return useQuery({
+    queryKey: ["student_groups"],
+    queryFn: async () => {
+      const { data: rpcData, error: rpcError } = await (supabase.rpc as any)("list_student_groups");
+      if (!rpcError) return (rpcData ?? []) as StudentGroup[];
+
+      const { data, error } = await supabase
+        .from("student_groups" as any)
+        .select("id,group_name,description,created_at")
+        .order("group_name", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as StudentGroup[];
+    },
+    initialData: [],
+    staleTime: 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -162,9 +281,42 @@ export function usePublications(kind: "journal" | "conference") {
   });
 }
 
-export function useSupervision(level: "phd" | "msc_completed" | "msc_ongoing") {
+export function useAllPublications() {
   const qc = useQueryClient();
   useEffect(() => {
+    const channel = supabase
+      .channel("publications:public")
+      .on("postgres_changes", { event: "*", schema: "public", table: "publications" }, () => {
+        qc.invalidateQueries({ queryKey: ["publications", "all"] });
+      })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
+  return useQuery({
+    queryKey: ["publications", "all"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("publications")
+        .select("id,kind,title,authors,venue,year,doi,article_url,pdf_url,pdf_download_allowed,sort_order")
+        .order("sort_order", { ascending: true })
+        .order("year", { ascending: false });
+
+      if (error) throw error;
+      return (data ?? []) as Publication[];
+    },
+    initialData: [],
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useSupervision(level: "phd" | "msc_completed" | "msc_ongoing", enabled = true) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!enabled) return;
     const channel = supabase
       .channel(`supervision:${level}`)
       .on(
@@ -176,7 +328,7 @@ export function useSupervision(level: "phd" | "msc_completed" | "msc_ongoing") {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [level, qc]);
+  }, [enabled, level, qc]);
 
   return useQuery({
     queryKey: ["supervision", level],
@@ -189,6 +341,9 @@ export function useSupervision(level: "phd" | "msc_completed" | "msc_ongoing") {
       return data ?? [];
     },
     initialData: [],
+    enabled,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -280,6 +435,29 @@ export const contactFallback: ContactContent = {
   facebook: "#",
   whatsapp: "#",
 };
+
+export function normalizeContactContent(value: unknown): ContactContent {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+  return {
+    email: contactValue(source.email, contactFallback.email),
+    institution_line1: contactValue(source.institution_line1, contactFallback.institution_line1),
+    institution_line2: contactValue(source.institution_line2, contactFallback.institution_line2),
+    linkedin: contactValue(source.linkedin, contactFallback.linkedin),
+    scholar: contactValue(source.scholar, contactFallback.scholar),
+    researchgate: contactValue(source.researchgate, contactFallback.researchgate),
+    x_url: contactValue(source.x_url, contactFallback.x_url ?? "#"),
+    instagram: contactValue(source.instagram, contactFallback.instagram ?? "#"),
+    facebook: contactValue(source.facebook, contactFallback.facebook ?? "#"),
+    whatsapp: contactValue(source.whatsapp, contactFallback.whatsapp ?? "#"),
+  };
+}
+
+function contactValue(value: unknown, fallback: string) {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
 
 export const homeStatsFallback: HomeStatsContent = {
   journal_articles: 21,

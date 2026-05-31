@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth, useUserRole } from "@/hooks/use-auth";
 import { Eye, EyeOff } from "lucide-react";
+import { useStudentGroups } from "@/lib/content";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "Sign in — Dr. Jimrise Ochwach" }] }),
@@ -103,11 +104,13 @@ function ForgotPasswordForm() {
 }
 
 function SignUpForm() {
+  const { data: groups = [], isLoading: groupsLoading, error: groupsError } = useStudentGroups();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [organizationName, setOrganizationName] = useState("");
   const [educationLevel, setEducationLevel] = useState("");
   const [program, setProgram] = useState("");
+  const [groupId, setGroupId] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -125,12 +128,13 @@ function SignUpForm() {
           organization_name: organizationName.trim(),
           education_level: educationLevel,
           program: program.trim(),
+          group_id: groupId,
         },
       },
     });
     setBusy(false);
     if (error) toast.error(error.message);
-    else toast.success("Account created. You can sign in now.");
+    else toast.success("Account created. Your account is pending admin approval.");
   };
   return (
     <form onSubmit={submit} className="space-y-4 pt-4">
@@ -159,6 +163,28 @@ function SignUpForm() {
         </select>
       </div>
       <div><Label>Program</Label><Input required value={program} onChange={(e) => setProgram(e.target.value)} placeholder="e.g. BSc Applied Mathematics" /></div>
+      <div>
+        <Label>Course / Group</Label>
+        <select
+          required
+          value={groupId}
+          onChange={(e) => setGroupId(e.target.value)}
+          disabled={groupsLoading || Boolean(groupsError)}
+          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+        >
+          <option value="">
+            {groupsLoading ? "Loading groups..." : groupsError ? "Groups are unavailable" : "Select your group"}
+          </option>
+          {groups.map((group) => (
+            <option key={group.id} value={group.id}>{group.group_name}</option>
+          ))}
+        </select>
+        {groupsError && (
+          <p className="mt-1 text-xs text-destructive">
+            Groups could not load. Please refresh the page or contact the administrator.
+          </p>
+        )}
+      </div>
       <div><Label>Email</Label><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
       <div>
         <Label>Password</Label>
@@ -182,7 +208,7 @@ function SignUpForm() {
         </div>
       </div>
       <Button type="submit" disabled={busy} className="w-full bg-gold text-navy-deep hover:bg-gold-soft">{busy ? "Creating…" : "Create account"}</Button>
-      <p className="text-xs text-muted-foreground">Students sign up here to access course materials and announcements.</p>
+      <p className="text-xs text-muted-foreground">After registration, your account remains pending until admin approval.</p>
     </form>
   );
 }

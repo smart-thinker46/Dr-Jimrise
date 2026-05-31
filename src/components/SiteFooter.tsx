@@ -1,5 +1,3 @@
-import { Link } from "@tanstack/react-router";
-
 export function SiteFooter() {
   return (
     <footer className="bg-navy-deep text-cream pt-14 pb-8">
@@ -14,14 +12,15 @@ export function SiteFooter() {
             <p className="text-xs uppercase tracking-widest text-gold font-semibold mb-4">Quick Links</p>
             <ul className="grid grid-cols-2 gap-y-2 text-sm">
               {[
+                { to: "/", label: "Home" },
                 { to: "/about", label: "About" },
                 { to: "/research", label: "Research" },
-                { to: "/supervision", label: "Supervision" },
                 { to: "/resources", label: "Resources" },
+                { to: "/blogs", label: "Insights" },
                 { to: "/contact", label: "Contact" },
               ].map((l) => (
                 <li key={l.to}>
-                  <Link to={l.to} className="text-cream/75 hover:text-gold transition-colors">{l.label}</Link>
+                  <a href={l.to} className="text-cream/75 hover:text-gold transition-colors">{l.label}</a>
                 </li>
               ))}
             </ul>

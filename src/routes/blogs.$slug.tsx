@@ -8,8 +8,8 @@ import { optimizedImageUrl } from "@/lib/images";
 export const Route = createFileRoute("/blogs/$slug")({
   head: () => ({
     meta: [
-      { title: "Blog post — Dr. Jimrise Ochwach" },
-      { name: "description", content: "Published blog post by Dr. Jimrise Ochwach." },
+      { title: "Insight — Dr. Jimrise Ochwach" },
+      { name: "description", content: "Published insight by Dr. Jimrise Ochwach." },
     ],
   }),
   component: BlogPostPage,
@@ -34,7 +34,7 @@ function BlogPostPage() {
         <section className="py-12 bg-background">
           <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
             <Button asChild variant="outline">
-              <Link to="/blogs"><ArrowLeft size={16} className="mr-2" />Back to blogs</Link>
+              <Link to="/blogs"><ArrowLeft size={16} className="mr-2" />Back to insights</Link>
             </Button>
           </div>
         </section>
@@ -49,7 +49,7 @@ function BlogPostPage() {
         <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 flex items-center justify-between gap-4 text-sm text-muted-foreground">
             <Link to="/blogs" className="inline-flex items-center gap-2 text-gold hover:text-navy-deep font-semibold">
-              <ArrowLeft size={16} /> Back to blogs
+              <ArrowLeft size={16} /> Back to insights
             </Link>
             <span className="inline-flex items-center gap-1">
               <CalendarDays size={14} />

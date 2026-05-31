@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, Download, Edit3, FileText, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { CalendarIcon, Download, Edit3, ExternalLink, Eye, FileText, Lock, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -20,6 +20,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+import { ConfirmAction } from "@/components/ConfirmAction";
+import { useStudentGroups, type StudentGroup } from "@/lib/content";
 
 type Resource = {
   id: string;
@@ -28,9 +30,18 @@ type Resource = {
   type: string;
   date: string;
   file_url: string | null;
+  source_type?: "file" | "link" | null;
+  link_url?: string | null;
+  allow_download?: boolean | null;
+  access_level?: "public" | "authenticated" | null;
   description?: string | null;
   sort_order: number;
   created_at: string;
+};
+
+type ResourceGroupAccess = {
+  resource_id: string;
+  group_id: string;
 };
 
 const FILE_TYPES = ["PDF", "DOCX", "PPTX", "XLSX", "ZIP", "Image", "Video", "Link", "Other"] as const;
@@ -53,6 +64,18 @@ function inferType(name: string): string {
   return "Other";
 }
 
+function normalizeUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (/^(https?:|mailto:|tel:)/i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+function getResourceHref(resource: Resource) {
+  if (resource.source_type === "link") return resource.link_url || "#";
+  return resource.file_url || "#";
+}
+
 export function ResourcesAdmin() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
@@ -60,6 +83,7 @@ export function ResourcesAdmin() {
   const [filterType, setFilterType] = useState<string>("all");
   const [editing, setEditing] = useState<Resource | null>(null);
   const [open, setOpen] = useState(false);
+  const { data: groups = [] } = useStudentGroups();
 
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["admin", "resources"],
@@ -73,11 +97,31 @@ export function ResourcesAdmin() {
     },
   });
 
+  const { data: accessRows = [] } = useQuery({
+    queryKey: ["admin", "resource_group_access"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("resource_group_access" as any)
+        .select("resource_id,group_id");
+      if (error) throw error;
+      return (data ?? []) as ResourceGroupAccess[];
+    },
+  });
+
+  const accessByResource = useMemo(() => {
+    const map = new Map<string, string[]>();
+    accessRows.forEach((row) => {
+      map.set(row.resource_id, [...(map.get(row.resource_id) ?? []), row.group_id]);
+    });
+    return map;
+  }, [accessRows]);
+
   useEffect(() => {
     const channel = supabase
       .channel("admin:resources")
       .on("postgres_changes", { event: "*", schema: "public", table: "resources" }, () => {
         qc.invalidateQueries({ queryKey: ["admin", "resources"] });
+        qc.invalidateQueries({ queryKey: ["admin", "resource_group_access"] });
         qc.invalidateQueries({ queryKey: ["resources"] });
       })
       .subscribe();
@@ -88,6 +132,7 @@ export function ResourcesAdmin() {
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["admin", "resources"] });
+    qc.invalidateQueries({ queryKey: ["admin", "resource_group_access"] });
     qc.invalidateQueries({ queryKey: ["resources"] });
   };
 
@@ -109,9 +154,9 @@ export function ResourcesAdmin() {
 
   const openCreate = () => { setEditing(null); setOpen(true); };
   const openEdit = (r: Resource) => { setEditing(r); setOpen(true); };
+  const editingGroupIds = useMemo(() => editing ? accessByResource.get(editing.id) ?? [] : [], [editing, accessByResource]);
 
   const remove = async (r: Resource) => {
-    if (!confirm(`Delete "${r.title}"?`)) return;
     // Best-effort: remove file from storage if it's in our bucket
     if (r.file_url) {
       const marker = "/storage/v1/object/public/resources/";
@@ -122,8 +167,8 @@ export function ResourcesAdmin() {
       }
     }
     const { error } = await supabase.from("resources").delete().eq("id", r.id);
-    if (error) toast.error(error.message);
-    else { toast.success("Deleted"); invalidate(); }
+    if (error) toast.error("Delete failed", { description: error.message });
+    else { toast.success("Resource deleted", { description: `"${r.title}" was removed.` }); invalidate(); }
   };
 
   return (
@@ -160,9 +205,9 @@ export function ResourcesAdmin() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat label="Total" value={rows.length} />
-        <Stat label="With files" value={rows.filter((r) => !!r.file_url).length} />
+        <Stat label="Files" value={rows.filter((r) => (r.source_type ?? "file") === "file").length} />
+        <Stat label="Links" value={rows.filter((r) => r.source_type === "link").length} />
         <Stat label="Courses" value={new Set(rows.map((r) => r.course)).size} />
-        <Stat label="Showing" value={filtered.length} />
       </div>
 
       {/* List */}
@@ -186,6 +231,15 @@ export function ResourcesAdmin() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-navy-deep truncate">{r.title}</p>
                       <Badge variant="secondary" className="text-[10px]">{r.type}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{r.source_type === "link" ? "Link" : r.allow_download === false ? "View only" : "Download"}</Badge>
+                      <Badge variant="outline" className="text-[10px]">
+                        {r.access_level === "authenticated" ? "Logged-in only" : "Anyone"}
+                      </Badge>
+                      {r.access_level !== "public" && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {(accessByResource.get(r.id)?.length ?? 0) || "All"} group{(accessByResource.get(r.id)?.length ?? 0) === 1 ? "" : "s"}
+                        </Badge>
+                      )}
                       <Badge className="bg-gold/15 text-navy-deep hover:bg-gold/15 text-[10px]">{r.course}</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
@@ -194,17 +248,26 @@ export function ResourcesAdmin() {
                     </p>
                   </div>
                   <div className="flex gap-2 shrink-0">
-                    <Button asChild size="sm" variant="outline" disabled={!r.file_url}>
-                      <a href={r.file_url ?? "#"} target="_blank" rel="noreferrer">
-                        <Download size={14} className="mr-1" />{r.file_url ? "Download" : "No file"}
+                    <Button asChild size="sm" variant="outline" disabled={!getResourceHref(r)}>
+                      <a href={getResourceHref(r)} target="_blank" rel="noreferrer">
+                        {r.source_type === "link" ? <ExternalLink size={14} className="mr-1" /> : r.allow_download === false ? <Eye size={14} className="mr-1" /> : <Download size={14} className="mr-1" />}
+                        {r.source_type === "link" ? "Open" : r.allow_download === false ? "View" : "Download"}
                       </a>
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => openEdit(r)}>
                       <Edit3 size={14} />
                     </Button>
-                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => remove(r)}>
-                      <Trash2 size={14} />
-                    </Button>
+                    <ConfirmAction
+                      title="Delete resource?"
+                      description={`This will remove "${r.title}" from the website. This action cannot be undone.`}
+                      confirmLabel="Delete resource"
+                      destructive
+                      onConfirm={() => remove(r)}
+                    >
+                      <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">
+                        <Trash2 size={14} />
+                      </Button>
+                    </ConfirmAction>
                   </div>
                 </li>
               ))}
@@ -218,6 +281,8 @@ export function ResourcesAdmin() {
         onOpenChange={setOpen}
         initial={editing}
         courses={courses}
+        groups={groups}
+        initialGroupIds={editingGroupIds}
         onSaved={invalidate}
       />
     </div>
@@ -235,12 +300,14 @@ function Stat({ label, value }: { label: string; value: number }) {
 
 // ---------- Form Dialog ----------
 function ResourceFormDialog({
-  open, onOpenChange, initial, courses, onSaved,
+  open, onOpenChange, initial, courses, groups, initialGroupIds, onSaved,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   initial: Resource | null;
   courses: string[];
+  groups: StudentGroup[];
+  initialGroupIds: string[];
   onSaved: () => void;
 }) {
   const [title, setTitle] = useState("");
@@ -250,6 +317,11 @@ function ResourceFormDialog({
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [description, setDescription] = useState("");
   const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [sourceType, setSourceType] = useState<"file" | "link">("file");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [allowDownload, setAllowDownload] = useState(true);
+  const [accessLevel, setAccessLevel] = useState<"public" | "authenticated">("public");
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -265,13 +337,23 @@ function ResourceFormDialog({
       setDate(isNaN(parsed.getTime()) ? new Date() : parsed);
       setDescription(initial.description ?? "");
       setFileUrl(initial.file_url);
+      setSourceType(initial.source_type === "link" ? "link" : "file");
+      setLinkUrl(initial.link_url ?? "");
+      setAllowDownload(initial.allow_download !== false);
+      setAccessLevel(initial.access_level === "authenticated" ? "authenticated" : "public");
+      setSelectedGroupIds(initialGroupIds);
     } else {
       setTitle(""); setCourse(""); setCourseMode("existing");
       setType("PDF"); setDate(new Date()); setDescription("");
       setFileUrl(null);
+      setSourceType("file");
+      setLinkUrl("");
+      setAllowDownload(true);
+      setAccessLevel("public");
+      setSelectedGroupIds([]);
     }
     setFile(null); setProgress(0);
-  }, [open, initial, courses]);
+  }, [open, initial, courses, initialGroupIds]);
 
   const handleFile = (f: File | null) => {
     if (!f) return;
@@ -295,47 +377,72 @@ function ResourceFormDialog({
     return pub.publicUrl;
   };
 
+  const saveGroupAccess = async (resourceId: string) => {
+    const { error: deleteError } = await supabase
+      .from("resource_group_access" as any)
+      .delete()
+      .eq("resource_id", resourceId);
+    if (deleteError) throw deleteError;
+    if (accessLevel === "public" || selectedGroupIds.length === 0) return;
+    const { error } = await supabase
+      .from("resource_group_access" as any)
+      .insert(selectedGroupIds.map((groupId) => ({ resource_id: resourceId, group_id: groupId })));
+    if (error) throw error;
+  };
+
   const submit = async () => {
     if (!title.trim()) return toast.error("Title is required.");
     if (!course.trim()) return toast.error("Course is required.");
     if (!date) return toast.error("Publication date is required.");
-    if (!initial && !file) return toast.error("Please attach a file or link.");
+    if (sourceType === "file" && !initial && !file) return toast.error("Please attach a file.");
+    if (sourceType === "file" && initial && !file && !fileUrl) return toast.error("Please attach a file.");
+    if (sourceType === "link" && !linkUrl.trim()) return toast.error("Please enter the resource link.");
 
     setBusy(true);
+    const toastId = toast.loading(initial ? "Saving resource changes..." : "Publishing resource...", {
+      description: "Please wait while the resource is updated.",
+    });
     try {
+      const normalizedLink = sourceType === "link" ? normalizeUrl(linkUrl) : null;
       const payload = {
         title: title.trim(),
         course: course.trim(),
-        type,
+        type: sourceType === "link" ? "Link" : type,
         date: format(date, "MMM d, yyyy"),
         description: description.trim() || null,
+        source_type: sourceType,
+        link_url: normalizedLink,
+        allow_download: sourceType === "file" ? allowDownload : false,
+        access_level: accessLevel,
       };
 
       if (initial) {
         // update first, then upload (so we have a stable id)
-        const newUrl = file ? await uploadFile(initial.id) : fileUrl;
+        const newUrl = sourceType === "file" ? (file ? await uploadFile(initial.id) : fileUrl) : null;
         const { error } = await supabase.from("resources")
           .update({ ...payload, file_url: newUrl })
           .eq("id", initial.id);
         if (error) throw error;
-        toast.success("Resource updated");
+        await saveGroupAccess(initial.id);
+        toast.success("Resource updated", { id: toastId, description: `"${title.trim()}" is now live.` });
       } else {
         const { data: inserted, error } = await supabase.from("resources")
           .insert({ ...payload, file_url: null, sort_order: 0 })
           .select("id").single();
         if (error) throw error;
-        const newUrl = await uploadFile(inserted.id);
+        const newUrl = sourceType === "file" ? await uploadFile(inserted.id) : null;
         if (newUrl) {
           const { error: upErr } = await supabase.from("resources")
             .update({ file_url: newUrl }).eq("id", inserted.id);
           if (upErr) throw upErr;
         }
-        toast.success("Resource added");
+        await saveGroupAccess(inserted.id);
+        toast.success("Resource published", { id: toastId, description: `"${title.trim()}" is now live.` });
       }
       onSaved();
       onOpenChange(false);
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to save");
+      toast.error("Resource save failed", { id: toastId, description: e?.message ?? "Failed to save" });
     } finally {
       setBusy(false);
       setProgress(0);
@@ -383,7 +490,7 @@ function ResourceFormDialog({
 
             <div>
               <Label>File type *</Label>
-              <Select value={type} onValueChange={setType}>
+              <Select value={type} onValueChange={setType} disabled={sourceType === "link"}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {FILE_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
@@ -391,6 +498,80 @@ function ResourceFormDialog({
               </Select>
             </div>
           </div>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <Label>Resource source *</Label>
+              <Select value={sourceType} onValueChange={(value) => setSourceType(value as "file" | "link")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="file">Upload file</SelectItem>
+                  <SelectItem value="link">External link</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Student access *</Label>
+              <Select
+                value={sourceType === "link" ? "link" : allowDownload ? "download" : "view"}
+                onValueChange={(value) => setAllowDownload(value === "download")}
+                disabled={sourceType === "link"}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="download">Can download</SelectItem>
+                  <SelectItem value="view">View only</SelectItem>
+                  <SelectItem value="link">Opens link</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div>
+            <Label>Who can access this resource? *</Label>
+            <Select value={accessLevel} onValueChange={(value) => setAccessLevel(value as "public" | "authenticated")}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="public">Anyone can open it</SelectItem>
+                <SelectItem value="authenticated">Specific logged-in groups</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Lock size={12} />
+              Choose one or more groups below. If no group is selected, all active logged-in users can access it.
+            </p>
+          </div>
+
+          {accessLevel === "authenticated" && (
+            <div className="rounded-lg border border-border bg-secondary/30 p-4">
+              <Label>Allowed groups</Label>
+              <div className="mt-3 grid gap-2">
+                {groups.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No groups yet. Create groups from Admin → Groups.</p>
+                )}
+                {groups.map((group) => (
+                  <label key={group.id} className="flex items-start gap-2 rounded-md bg-background p-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={selectedGroupIds.includes(group.id)}
+                      onChange={(event) => {
+                        setSelectedGroupIds((current) =>
+                          event.target.checked ? [...current, group.id] : current.filter((id) => id !== group.id)
+                        );
+                      }}
+                    />
+                    <span>
+                      <span className="font-medium text-navy-deep">{group.group_name}</span>
+                      {group.description && <span className="block text-xs text-muted-foreground">{group.description}</span>}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <Label>Publication date *</Label>
@@ -413,30 +594,38 @@ function ResourceFormDialog({
               placeholder="Short summary shown to students" />
           </div>
 
-          <div>
-            <Label>File {initial ? "(leave empty to keep existing)" : "*"}</Label>
-            <label className="mt-1 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-muted rounded-lg p-6 cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors">
-              <Upload size={24} className="text-muted-foreground" />
-              <span className="text-sm font-medium">{file ? file.name : "Click to choose a file"}</span>
-              <span className="text-xs text-muted-foreground">PDF, DOCX, PPTX, ZIP, Image, Video — up to 50 MB</span>
-              <input type="file" className="hidden" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
-            </label>
-            {file && (
-              <button type="button" onClick={() => setFile(null)} className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive">
-                <X size={12} /> Remove selected file
-              </button>
-            )}
-            {!file && fileUrl && (
-              <p className="text-xs text-muted-foreground mt-2">
-                Current file: <a href={fileUrl} target="_blank" rel="noreferrer" className="text-gold underline">view</a>
-              </p>
-            )}
-            {progress > 0 && progress < 100 && (
-              <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
-                <div className="h-full bg-gold transition-all" style={{ width: `${progress}%` }} />
-              </div>
-            )}
-          </div>
+          {sourceType === "link" ? (
+            <div>
+              <Label>Resource link *</Label>
+              <Input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://example.com/resource" />
+              <p className="text-xs text-muted-foreground mt-1">External links open in a new browser tab.</p>
+            </div>
+          ) : (
+            <div>
+              <Label>File {initial ? "(leave empty to keep existing)" : "*"}</Label>
+              <label className="mt-1 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-muted rounded-lg p-6 cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors">
+                <Upload size={24} className="text-muted-foreground" />
+                <span className="text-sm font-medium">{file ? file.name : "Click to choose a file"}</span>
+                <span className="text-xs text-muted-foreground">PDF, DOCX, PPTX, ZIP, Image, Video — up to 50 MB</span>
+                <input type="file" className="hidden" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
+              </label>
+              {file && (
+                <button type="button" onClick={() => setFile(null)} className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive">
+                  <X size={12} /> Remove selected file
+                </button>
+              )}
+              {!file && fileUrl && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Current file: <a href={fileUrl} target="_blank" rel="noreferrer" className="text-gold underline">view</a>
+                </p>
+              )}
+              {progress > 0 && progress < 100 && (
+                <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full bg-gold transition-all" style={{ width: `${progress}%` }} />
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <DialogFooter>

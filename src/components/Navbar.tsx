@@ -1,20 +1,22 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { Menu, X, LogIn, LayoutDashboard, LogOut, Mail, Instagram, Facebook, MessageCircle } from "lucide-react";
 import { navLinks } from "@/lib/site-data";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth, useUserRole } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
-import { contactFallback, type ContactContent, useSiteContent } from "@/lib/content";
+import { contactFallback, normalizeContactContent, useSiteContent } from "@/lib/content";
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
   const { user } = useAuth();
   const { data: role, isLoading: roleLoading } = useUserRole(user);
-  const { data: contact } = useSiteContent<ContactContent>("contact", contactFallback);
+  const { data: contactData } = useSiteContent<unknown>("contact", contactFallback);
+  const contact = normalizeContactContent(contactData);
   const dashTo = role === "admin" ? "/admin" : "/student";
 
   useEffect(() => {
@@ -74,13 +76,15 @@ export function Navbar() {
         <ul className="hidden lg:flex items-center gap-1">
           {navLinks.map((l) => (
             <li key={l.to}>
-              <Link
-                to={l.to}
-                className="relative px-3 py-2 text-sm font-medium text-cream/85 hover:text-gold transition-colors"
-                activeProps={{ className: "text-gold" }}
+              <a
+                href={l.to}
+                className={cn(
+                  "relative px-3 py-2 text-sm font-medium text-cream/85 hover:text-gold transition-colors",
+                  isActiveNav(pathname, l.to) && "text-gold"
+                )}
               >
                 {l.label}
-              </Link>
+              </a>
             </li>
           ))}
           <li className="ml-3 flex items-center gap-2">
@@ -109,7 +113,16 @@ export function Navbar() {
           <ul className="px-4 py-3 space-y-1">
             {navLinks.map((l) => (
               <li key={l.to}>
-                <Link to={l.to} onClick={() => setOpen(false)} className="block px-3 py-2 text-sm text-cream/85 hover:text-gold hover:bg-cream/5 rounded-md">{l.label}</Link>
+                <a
+                  href={l.to}
+                  onClick={() => setOpen(false)}
+                  className={cn(
+                    "block px-3 py-2 text-sm text-cream/85 hover:text-gold hover:bg-cream/5 rounded-md",
+                    isActiveNav(pathname, l.to) && "text-gold bg-cream/5"
+                  )}
+                >
+                  {l.label}
+                </a>
               </li>
             ))}
             <li className="pt-2 border-t border-cream/10 mt-2">
@@ -129,16 +142,21 @@ export function Navbar() {
   );
 }
 
-function normalizeSocialUrl(value?: string) {
-  if (!value || value.trim() === "") return "#";
+function isActiveNav(pathname: string, to: string) {
+  if (to === "/") return pathname === "/";
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
+
+function normalizeSocialUrl(value?: unknown) {
+  if (typeof value !== "string" || value.trim() === "") return "#";
   const trimmed = value.trim();
   if (trimmed === "#") return "#";
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   return `https://${trimmed.replace(/^@/, "")}`;
 }
 
-function normalizeWhatsApp(value?: string) {
-  if (!value || value.trim() === "") return "#";
+function normalizeWhatsApp(value?: unknown) {
+  if (typeof value !== "string" || value.trim() === "") return "#";
   const trimmed = value.trim();
   if (trimmed === "#") return "#";
   if (/^https?:\/\//i.test(trimmed)) return trimmed;

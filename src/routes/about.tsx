@@ -40,7 +40,6 @@ function AboutPage() {
   const { data: workshopsTraining } = useSiteContent<Array<{ year: string; title: string; detail: string }>>("workshops_training", []);
   const { data: awards } = useSiteContent<Array<{ year: string; text: string }>>("awards", []);
   const { data: personalInterests } = useSiteContent<string[]>("personal_interests", []);
-  const { data: referencesNote } = useSiteContent<{ text: string }>("references_note", { text: "" });
 
   return (
     <Layout plain>
@@ -51,15 +50,15 @@ function AboutPage() {
             <div className="lg:col-span-4">
               {about.photo_url ? (
                 <img
-                  src={optimizedImageUrl(about.photo_url, 640)}
-                  srcSet={optimizedImageSrcSet(about.photo_url, [320, 480, 640, 800])}
+                  src={optimizedImageUrl(about.photo_url, 640, 72, "contain")}
+                  srcSet={optimizedImageSrcSet(about.photo_url, [320, 480, 640, 800], 72, "contain")}
                   sizes="(min-width: 1024px) 33vw, calc(100vw - 2rem)"
                   alt="Dr. Jimrise Ochwach"
                   width={640}
                   height={800}
                   loading="lazy"
                   decoding="async"
-                  className="w-full aspect-[4/5] object-cover rounded-xl shadow-xl"
+                  className="w-full aspect-[4/5] object-contain rounded-xl bg-secondary/50 shadow-xl"
                 />
               ) : (
                 <div className="w-full aspect-[4/5] rounded-xl border border-border bg-secondary/50 shadow-xl flex items-center justify-center text-center p-8">
@@ -290,18 +289,6 @@ function AboutPage() {
         </section>
       )}
 
-      {referencesNote.text && (
-        <section className="py-12 bg-background">
-          <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-            <Card className="border-gold/30 bg-gold/5">
-              <CardContent className="pt-6">
-                <p className="text-xs uppercase tracking-[0.2em] text-gold font-semibold mb-2">References</p>
-                <p className="font-serif text-xl text-navy-deep">{referencesNote.text}</p>
-              </CardContent>
-            </Card>
-          </div>
-        </section>
-      )}
     </Layout>
   );
 }

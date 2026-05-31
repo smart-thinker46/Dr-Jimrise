@@ -41,6 +41,9 @@
   --animate-float: float 6s ease-in-out infinite;
   --animate-fade-in: fade-in 0.7s ease-out forwards;
   --animate-slide-up: slide-up 0.8s ease-out forwards;
+  --animate-hero-reveal: hero-reveal 0.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  --animate-hero-title: hero-title 0.9s cubic-bezier(0.18, 1, 0.28, 1) forwards;
+  --animate-hero-photo: hero-photo 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 
   @keyframes float {
     0%, 100% { transform: translateY(0) rotate(0deg); opacity: 0.4; }
@@ -53,6 +56,18 @@
   @keyframes slide-up {
     from { opacity: 0; transform: translateY(40px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes hero-reveal {
+    from { opacity: 0; transform: translateY(22px); filter: blur(8px); }
+    to { opacity: 1; transform: translateY(0); filter: blur(0); }
+  }
+  @keyframes hero-title {
+    from { opacity: 0; transform: translateY(34px) scale(0.98); filter: blur(10px); }
+    to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  }
+  @keyframes hero-photo {
+    from { opacity: 0; transform: translateX(36px) scale(0.96); filter: blur(10px); }
+    to { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
   }
 }
 
@@ -135,6 +150,21 @@
     background-repeat: no-repeat;
   }
   .section-pad { padding-top: 5rem; padding-bottom: 5rem; }
+  .hero-reveal {
+    opacity: 0;
+    animation: var(--animate-hero-reveal);
+    animation-delay: var(--hero-delay, 0ms);
+  }
+  .hero-title-reveal {
+    opacity: 0;
+    animation: var(--animate-hero-title);
+    animation-delay: var(--hero-delay, 0ms);
+  }
+  .hero-photo-reveal {
+    opacity: 0;
+    animation: var(--animate-hero-photo);
+    animation-delay: var(--hero-delay, 0ms);
+  }
   .blog-content > * + * { margin-top: 1rem; }
   .blog-editor-content {
     max-width: 900px;

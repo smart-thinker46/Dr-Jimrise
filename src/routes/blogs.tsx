@@ -8,7 +8,7 @@ import { useBlogs } from "@/lib/content";
 export const Route = createFileRoute("/blogs")({
   head: () => ({
     meta: [
-      { title: "Blogs — Dr. Jimrise Ochwach" },
+      { title: "Insights — Dr. Jimrise Ochwach" },
       { name: "description", content: "Published articles, updates, and reflections from Dr. Jimrise Ochwach." },
     ],
   }),
@@ -20,17 +20,17 @@ function BlogsPage() {
 
   return (
     <Layout plain>
-      <PageHeader eyebrow="Writing" title="Blogs & updates" subtitle="Published articles, teaching notes, announcements, and reflections." />
+      <PageHeader eyebrow="Writing" title="Insights & updates" subtitle="Published articles, teaching notes, announcements, and reflections." />
       <section className="py-16 md:py-24 bg-background">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
           {isLoading ? (
-            <p className="text-muted-foreground">Loading posts...</p>
+            <p className="text-muted-foreground">Loading insights...</p>
           ) : posts.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
                 <FilePenLine className="mx-auto text-gold mb-3" size={30} />
-                <p className="font-serif text-xl font-semibold text-navy-deep">No published posts yet.</p>
-                <p className="text-sm text-muted-foreground mt-2">Posts published from the admin dashboard will appear here.</p>
+                <p className="font-serif text-xl font-semibold text-navy-deep">No published insights yet.</p>
+                <p className="text-sm text-muted-foreground mt-2">Insights published from the admin dashboard will appear here.</p>
               </CardContent>
             </Card>
           ) : (
@@ -53,7 +53,7 @@ function BlogsPage() {
                         <p className="mt-3 text-sm text-foreground/70 leading-relaxed flex-1">{post.excerpt}</p>
                       )}
                       <span className="mt-5 text-sm font-semibold text-gold inline-flex items-center gap-1">
-                        Read post <ArrowRight size={14} />
+                        Read insight <ArrowRight size={14} />
                       </span>
                     </CardContent>
                   </Card>
