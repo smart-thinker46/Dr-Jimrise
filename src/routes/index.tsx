@@ -103,9 +103,7 @@ function Home() {
                   className="relative w-full aspect-[4/5] object-cover rounded-2xl shadow-2xl ring-1 ring-cream/10"
                 />
               ) : (
-                <div className="relative w-full aspect-[4/5] rounded-2xl border border-cream/15 bg-cream/5 shadow-2xl ring-1 ring-cream/10 flex items-center justify-center text-center p-8">
-                  <p className="text-sm text-cream/60">Hero photo will appear after admin uploads it.</p>
-                </div>
+                <div className="relative w-full aspect-[4/5] rounded-2xl border border-cream/15 bg-cream/5 shadow-2xl ring-1 ring-cream/10" />
               )}
             </div>
           </div>
