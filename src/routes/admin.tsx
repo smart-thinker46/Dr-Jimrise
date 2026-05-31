@@ -1148,7 +1148,7 @@ type AdminUser = {
 function UsersAdmin({ currentUserId }: { currentUserId: string }) {
   const qc = useQueryClient();
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("123Demo...");
+  const [password, setPassword] = useState("");
   const [role, setRole] = useState<"student" | "admin" | "user">("student");
   const [busy, setBusy] = useState(false);
 
@@ -1176,7 +1176,7 @@ function UsersAdmin({ currentUserId }: { currentUserId: string }) {
     if (error) return toast.error(error.message);
     toast.success("User created");
     setEmail("");
-    setPassword("123Demo...");
+    setPassword("");
     refresh();
   };
 
