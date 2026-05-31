@@ -40,3 +40,20 @@ export function useUserRole(user: User | null) {
     staleTime: 30_000,
   });
 }
+
+export function useUserAccessStatus(user: User | null) {
+  return useQuery({
+    queryKey: ["user_access_status", user?.id ?? null],
+    queryFn: async () => {
+      if (!user) return "active" as const;
+      const { data } = await supabase
+        .from("app_user_status" as any)
+        .select("status")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      return ((data as any)?.status ?? "active") as "active" | "suspended" | "blocked";
+    },
+    enabled: !!user,
+    staleTime: 15_000,
+  });
+}

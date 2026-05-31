@@ -4,9 +4,10 @@ import { Megaphone, BookOpen, Download, Clock, Calendar, FileText, FileType, Pre
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Layout, PageHeader } from "@/components/Layout";
-import { courses } from "@/lib/site-data";
-import { useAnnouncements, useResources } from "@/lib/content";
+import { courses as coursesFallback } from "@/lib/site-data";
+import { useAnnouncements, useResources, useSiteContent } from "@/lib/content";
 import { cn } from "@/lib/utils";
+import { useAuth, useUserAccessStatus } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/resources")({
   head: () => ({
@@ -22,6 +23,9 @@ function ResourcesPage() {
   const [filter, setFilter] = useState<string>("All");
   const { data: announcementsData } = useAnnouncements();
   const { data: resourcesData } = useResources();
+  const { data: courses } = useSiteContent<typeof coursesFallback>("courses", coursesFallback);
+  const { user } = useAuth();
+  const { data: accessStatus = "active" } = useUserAccessStatus(user);
   const announcements = announcementsData ?? [];
   const resources = resourcesData ?? [];
 
@@ -34,6 +38,17 @@ function ResourcesPage() {
       <PageHeader eyebrow="For Students" title="Resources for Students" subtitle="Access lecture notes, past papers, assignments, and important announcements." />
       <section className="py-16 md:py-24 bg-gradient-to-b from-secondary/60 to-secondary/30">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          {accessStatus !== "active" ? (
+            <Card className="border-destructive/40">
+              <CardContent className="pt-6">
+                <h2 className="font-serif text-xl font-bold text-navy-deep">Resource access restricted</h2>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Your account is {accessStatus}. Contact the site administrator for help.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+          <>
 
           <div className="mb-14">
             <div className="flex items-center gap-3 mb-6">
@@ -142,6 +157,8 @@ function ResourcesPage() {
               </ul>
             </CardContent>
           </Card>
+          </>
+          )}
         </div>
       </section>
     </Layout>

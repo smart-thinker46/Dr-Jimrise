@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import {
   Download, Megaphone, BookOpen, LayoutDashboard, Search, FileText, ShieldCheck,
 } from "lucide-react";
-import { useAuth, useUserRole } from "@/hooks/use-auth";
+import { useAuth, useUserAccessStatus, useUserRole } from "@/hooks/use-auth";
 import { useAnnouncements, useResources } from "@/lib/content";
 import { DashboardShell, type DashboardNavItem } from "@/components/DashboardShell";
 
@@ -25,18 +25,21 @@ function StudentPage() {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const { data: role } = useUserRole(user);
+  const { data: accessStatus = "active" } = useUserAccessStatus(user);
   const { data: announcements } = useAnnouncements();
   const { data: resources } = useResources();
   const [active, setActive] = useState("overview");
   const [query, setQuery] = useState("");
+  const items = announcements ?? [];
+  const files = resources ?? [];
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
   }, [loading, user, navigate]);
 
-  if (!user) return null;
-  const items = announcements ?? [];
-  const files = resources ?? [];
+  useEffect(() => {
+    if (role === "admin") navigate({ to: "/admin" });
+  }, [role, navigate]);
 
   const filteredFiles = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -45,6 +48,8 @@ function StudentPage() {
       [r.title, r.course, r.type].filter(Boolean).some((v) => String(v).toLowerCase().includes(q))
     );
   }, [files, query]);
+
+  if (!user) return null;
 
   const activeMeta = NAV.find((n) => n.id === active);
 
@@ -63,10 +68,23 @@ function StudentPage() {
       title={activeMeta?.label ?? "Dashboard"}
       subtitle="Latest announcements and learning resources"
       userEmail={user.email ?? undefined}
+      userId={user.id}
       nav={nav}
       active={active}
       onSelect={onSelect}
     >
+      {accessStatus !== "active" && (
+        <Card className="border-destructive/40">
+          <CardContent className="pt-6">
+            <h2 className="font-serif text-xl font-bold text-navy-deep">Access restricted</h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              Your account is {accessStatus}. Contact the site administrator if you believe this is a mistake.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+      {accessStatus === "active" && (
+      <>
       {active === "overview" && (
         <div className="space-y-6">
           <div className="grid sm:grid-cols-3 gap-4">
@@ -140,6 +158,8 @@ function StudentPage() {
             {filteredFiles.length === 0 && <p className="text-sm text-muted-foreground italic col-span-full">No resources match your search.</p>}
           </div>
         </div>
+      )}
+      </>
       )}
     </DashboardShell>
   );

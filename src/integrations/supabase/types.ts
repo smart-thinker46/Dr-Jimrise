@@ -44,32 +44,41 @@ export type Database = {
       publications: {
         Row: {
           authors: string | null
+          article_url: string | null
           created_at: string
           doi: string | null
           id: string
           kind: string
+          pdf_download_allowed: boolean
+          pdf_url: string | null
           sort_order: number
           title: string
           venue: string | null
           year: number | null
         }
         Insert: {
+          article_url?: string | null
           authors?: string | null
           created_at?: string
           doi?: string | null
           id?: string
           kind: string
+          pdf_download_allowed?: boolean
+          pdf_url?: string | null
           sort_order?: number
           title: string
           venue?: string | null
           year?: number | null
         }
         Update: {
+          article_url?: string | null
           authors?: string | null
           created_at?: string
           doi?: string | null
           id?: string
           kind?: string
+          pdf_download_allowed?: boolean
+          pdf_url?: string | null
           sort_order?: number
           title?: string
           venue?: string | null

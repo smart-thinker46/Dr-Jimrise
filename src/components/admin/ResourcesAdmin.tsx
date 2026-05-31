@@ -73,6 +73,19 @@ export function ResourcesAdmin() {
     },
   });
 
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin:resources")
+      .on("postgres_changes", { event: "*", schema: "public", table: "resources" }, () => {
+        qc.invalidateQueries({ queryKey: ["admin", "resources"] });
+        qc.invalidateQueries({ queryKey: ["resources"] });
+      })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["admin", "resources"] });
     qc.invalidateQueries({ queryKey: ["resources"] });

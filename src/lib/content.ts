@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export type HeroContent = {
@@ -22,9 +23,34 @@ export type ContactContent = {
   linkedin: string;
   scholar: string;
   researchgate: string;
+  x_url?: string;
+  instagram?: string;
+  facebook?: string;
+  whatsapp?: string;
+};
+
+export type HomeStatsContent = {
+  journal_articles: number;
+  phd_supervision: number;
+  msc_completed: number;
+  msc_ongoing: number;
+};
+
+export type BlogPost = {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  content: string;
+  status: "draft" | "published";
+  published_at: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
 };
 
 export function useSiteContent<T>(key: string, fallback: T) {
+  const qc = useQueryClient();
   const q = useQuery({
     queryKey: ["site_content", key],
     queryFn: async () => {
@@ -33,10 +59,39 @@ export function useSiteContent<T>(key: string, fallback: T) {
     },
     initialData: fallback,
   });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`site_content:${key}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "site_content", filter: `key=eq.${key}` },
+        () => qc.invalidateQueries({ queryKey: ["site_content", key] }),
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [key, qc]);
+
   return { ...q, data: (q.data ?? fallback) as T };
 }
 
 export function useAnnouncements() {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const channel = supabase
+      .channel("announcements:public")
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcements" }, () => {
+        qc.invalidateQueries({ queryKey: ["announcements"] });
+      })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
   return useQuery({
     queryKey: ["announcements"],
     queryFn: async () => {
@@ -51,6 +106,19 @@ export function useAnnouncements() {
 }
 
 export function useResources() {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const channel = supabase
+      .channel("resources:public")
+      .on("postgres_changes", { event: "*", schema: "public", table: "resources" }, () => {
+        qc.invalidateQueries({ queryKey: ["resources"] });
+      })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
   return useQuery({
     queryKey: ["resources"],
     queryFn: async () => {
@@ -65,6 +133,21 @@ export function useResources() {
 }
 
 export function usePublications(kind: "journal" | "conference") {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const channel = supabase
+      .channel(`publications:${kind}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "publications", filter: `kind=eq.${kind}` },
+        () => qc.invalidateQueries({ queryKey: ["publications", kind] }),
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [kind, qc]);
+
   return useQuery({
     queryKey: ["publications", kind],
     queryFn: async () => {
@@ -80,6 +163,21 @@ export function usePublications(kind: "journal" | "conference") {
 }
 
 export function useSupervision(level: "phd" | "msc_completed" | "msc_ongoing") {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const channel = supabase
+      .channel(`supervision:${level}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "supervision", filter: `level=eq.${level}` },
+        () => qc.invalidateQueries({ queryKey: ["supervision", level] }),
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [level, qc]);
+
   return useQuery({
     queryKey: ["supervision", level],
     queryFn: async () => {
@@ -91,6 +189,68 @@ export function useSupervision(level: "phd" | "msc_completed" | "msc_ongoing") {
       return data ?? [];
     },
     initialData: [],
+  });
+}
+
+export function useBlogs() {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const channel = supabase
+      .channel("blogs:public")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "blog_posts" },
+        () => qc.invalidateQueries({ queryKey: ["blogs"] }),
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
+  return useQuery({
+    queryKey: ["blogs"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("blog_posts" as any)
+        .select("*")
+        .eq("status", "published")
+        .order("sort_order", { ascending: true })
+        .order("published_at", { ascending: false });
+      return (data ?? []) as BlogPost[];
+    },
+    initialData: [],
+  });
+}
+
+export function useBlog(slug: string) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const channel = supabase
+      .channel(`blog:${slug}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "blog_posts", filter: `slug=eq.${slug}` },
+        () => qc.invalidateQueries({ queryKey: ["blog", slug] }),
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [qc, slug]);
+
+  return useQuery({
+    queryKey: ["blog", slug],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("blog_posts" as any)
+        .select("*")
+        .eq("slug", slug)
+        .eq("status", "published")
+        .maybeSingle();
+      return data as BlogPost | null;
+    },
+    initialData: null,
   });
 }
 
@@ -115,4 +275,15 @@ export const contactFallback: ContactContent = {
   linkedin: "#",
   scholar: "#",
   researchgate: "#",
+  x_url: "#",
+  instagram: "#",
+  facebook: "#",
+  whatsapp: "#",
+};
+
+export const homeStatsFallback: HomeStatsContent = {
+  journal_articles: 21,
+  phd_supervision: 1,
+  msc_completed: 2,
+  msc_ongoing: 5,
 };

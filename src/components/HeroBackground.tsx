@@ -9,7 +9,26 @@ const equations = [
   "ℒ{f(t)} = ∫₀^∞ e^{−st}f(t)dt",
 ];
 
-export function HeroBackground() {
+const extraEquations = [
+  "S(t)+I(t)+R(t)=N",
+  "∇²φ = 0",
+  "Re = ρuL/μ",
+  "P(X=x)=λˣe^{-λ}/x!",
+  "∂C/∂t = D∂²C/∂x² − v∂C/∂x",
+  "min z = cᵀx",
+  "A⃗ = ∇ × B⃗",
+  "K = rN(1−N/K)",
+  "∑ᵢ pᵢ log pᵢ",
+  "J(θ)=1/m∑L(hθ(x),y)",
+];
+
+export function HeroBackground({ dense = false, medium = false }: { dense?: boolean; medium?: boolean }) {
+  const visibleEquations = dense
+    ? [...equations, ...extraEquations]
+    : medium
+      ? [...equations, ...extraEquations.slice(0, 4)]
+      : equations;
+
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(201,168,76,0.18),transparent_55%)]" />
@@ -24,14 +43,14 @@ export function HeroBackground() {
         <rect width="100%" height="100%" fill="url(#grid)" />
       </svg>
       {/* Floating equations */}
-      {equations.map((eq, i) => (
+      {visibleEquations.map((eq, i) => (
         <span
           key={i}
-          className="absolute font-serif italic text-gold/40 select-none animate-float"
+          className="absolute font-serif italic text-gold/35 select-none animate-float"
           style={{
-            top: `${(i * 13 + 8) % 80}%`,
-            left: `${(i * 23 + 5) % 90}%`,
-            fontSize: `${0.85 + (i % 3) * 0.25}rem`,
+            top: `${(i * 11 + 8) % 84}%`,
+            left: `${(i * 17 + 5) % 92}%`,
+            fontSize: `${0.75 + (i % 4) * 0.2}rem`,
             animationDelay: `${i * 0.7}s`,
             animationDuration: `${6 + (i % 4)}s`,
           }}

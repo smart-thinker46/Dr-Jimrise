@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Layout, PageHeader } from "@/components/Layout";
 import { toast } from "sonner";
 import { useSiteContent, contactFallback, type ContactContent } from "@/lib/content";
@@ -21,7 +20,8 @@ export const Route = createFileRoute("/contact")({
 });
 
 function ContactPage() {
-  const { data: c } = useSiteContent<ContactContent>("contact", contactFallback);
+  const { data } = useSiteContent<Partial<ContactContent>>("contact", contactFallback);
+  const c = { ...contactFallback, ...(isContactObject(data) ? data : {}) };
   const [sending, setSending] = useState(false);
 
   return (
@@ -56,7 +56,7 @@ function ContactPage() {
                     { Icon: GraduationCap, label: "Google Scholar", href: c.scholar },
                     { Icon: BookOpen, label: "ResearchGate", href: c.researchgate },
                   ].map(({ Icon, label, href }) => (
-                    <a key={label} href={href} aria-label={label}
+                    <a key={label} href={safeExternalUrl(href)} target={href && href !== "#" ? "_blank" : undefined} rel={href && href !== "#" ? "noreferrer" : undefined} aria-label={label}
                       className="w-11 h-11 rounded-lg bg-navy-deep text-cream flex items-center justify-center hover:bg-gold hover:text-navy-deep transition-colors">
                       <Icon size={18} />
                     </a>
@@ -89,15 +89,19 @@ function ContactPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="subject">Subject</Label>
-                <Select>
-                  <SelectTrigger id="subject"><SelectValue placeholder="Select a topic" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="general">General Enquiry</SelectItem>
-                    <SelectItem value="student">Student Query</SelectItem>
-                    <SelectItem value="research">Research Collaboration</SelectItem>
-                    <SelectItem value="supervision">Supervision Interest</SelectItem>
-                  </SelectContent>
-                </Select>
+                <select
+                  id="subject"
+                  name="subject"
+                  required
+                  defaultValue=""
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="" disabled>Select a topic</option>
+                  <option value="general">General Enquiry</option>
+                  <option value="student">Student Query</option>
+                  <option value="research">Research Collaboration</option>
+                  <option value="supervision">Supervision Interest</option>
+                </select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="message">Message</Label>
@@ -112,4 +116,16 @@ function ContactPage() {
       </section>
     </Layout>
   );
+}
+
+function isContactObject(value: unknown): value is Partial<ContactContent> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function safeExternalUrl(value?: string) {
+  if (!value || value.trim() === "") return "#";
+  const trimmed = value.trim();
+  if (trimmed === "#") return "#";
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
 }

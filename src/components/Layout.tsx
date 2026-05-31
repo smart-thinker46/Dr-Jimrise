@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { Navbar } from "./Navbar";
 import { SiteFooter } from "./SiteFooter";
+import { HeroBackground } from "./HeroBackground";
 
 export function Layout({ children, plain = false }: { children: ReactNode; plain?: boolean }) {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-background flex flex-col">
       <Navbar />
-      <main className={plain ? "flex-1" : "flex-1 pt-16"}>{children}</main>
+      <main className={plain ? "flex-1 min-w-0" : "flex-1 min-w-0 pt-[92px]"}>{children}</main>
       <SiteFooter />
     </div>
   );
@@ -42,10 +43,11 @@ export function SectionTitle({
   );
 }
 
-export function PageHeader({ eyebrow, title, subtitle }: { eyebrow?: string; title: string; subtitle?: string }) {
+export function PageHeader({ eyebrow, title, subtitle, denseMath = false }: { eyebrow?: string; title: string; subtitle?: string; denseMath?: boolean }) {
   return (
-    <section className="bg-navy-deep text-cream pt-20 pb-14 md:pt-28 md:pb-20 border-b border-cream/10">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <section className="relative overflow-hidden bg-navy-deep text-cream pt-[104px] pb-14 md:pt-[136px] md:pb-20 border-b border-cream/10">
+      <HeroBackground dense={denseMath} />
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {eyebrow && <p className="text-gold text-xs font-semibold tracking-[0.25em] uppercase mb-4">{eyebrow}</p>}
         <h1 className="font-serif text-4xl md:text-6xl font-bold tracking-tight text-balance">{title}</h1>
         {subtitle && <p className="mt-5 max-w-3xl text-base md:text-lg text-cream/75 leading-relaxed">{subtitle}</p>}
