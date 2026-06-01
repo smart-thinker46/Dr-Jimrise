@@ -13,13 +13,16 @@ import {
 } from "@/lib/site-data";
 import { useSiteContent, aboutFallback, type AboutContent } from "@/lib/content";
 import { optimizedImageSrcSet, optimizedImageUrl } from "@/lib/images";
+import { seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/about")({
   head: () => ({
-    meta: [
-      { title: "About — Dr. Jimrise Ochwach" },
-      { name: "description", content: "Biography, education, and credentials of Dr. Jimrise Ochwach, Applied Mathematics lecturer." },
-    ],
+    ...seoHead({
+      title: "About Dr. Jimrise Ochwach, PhD - Applied Mathematician",
+      description: "Biography, education, experience, certifications, leadership, and professional profile of Dr. Jimrise Ochwach, Lecturer in Applied Mathematics.",
+      path: "/about",
+      type: "profile",
+    }),
   }),
   component: AboutPage,
 });

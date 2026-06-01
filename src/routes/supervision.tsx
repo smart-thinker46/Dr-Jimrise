@@ -2,13 +2,15 @@ import { createFileRoute } from "@tanstack/react-router";
 import { GraduationCap, ShieldCheck, Users } from "lucide-react";
 import { Layout, PageHeader } from "@/components/Layout";
 import { useSupervision } from "@/lib/content";
+import { seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/supervision")({
   head: () => ({
-    meta: [
-      { title: "Student Supervision — Dr. Jimrise Ochwach" },
-      { name: "description", content: "PhD and MSc students supervised, ongoing and completed." },
-    ],
+    ...seoHead({
+      title: "Student Supervision - Dr. Jimrise Ochwach",
+      description: "PhD and MSc supervision by Dr. Jimrise Ochwach, including ongoing and completed postgraduate research projects.",
+      path: "/supervision",
+    }),
   }),
   component: SupPage,
 });

@@ -4,13 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Layout, PageHeader } from "@/components/Layout";
 import { useBlog } from "@/lib/content";
 import { optimizedImageUrl } from "@/lib/images";
+import { seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/blogs/$slug")({
-  head: () => ({
-    meta: [
-      { title: "Insight — Dr. Jimrise Ochwach" },
-      { name: "description", content: "Published insight by Dr. Jimrise Ochwach." },
-    ],
+  head: ({ params }) => ({
+    ...seoHead({
+      title: "Academic Insight - Dr. Jimrise Ochwach",
+      description: "Published academic insight by Dr. Jimrise Ochwach on applied mathematics, research, teaching, and student learning.",
+      path: `/blogs/${params.slug}`,
+      type: "article",
+    }),
   }),
   component: BlogPostPage,
 });

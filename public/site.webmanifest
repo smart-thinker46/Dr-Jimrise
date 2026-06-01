@@ -1,0 +1,16 @@
+{
+  "name": "Dr. Jimrise Ochwach, PhD",
+  "short_name": "Dr. Ochwach",
+  "description": "Academic profile and student resource hub for Dr. Jimrise Ochwach, PhD.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1a2e4a",
+  "icons": [
+    {
+      "src": "/jimriseicon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

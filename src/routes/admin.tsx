@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { Component, useEffect, useRef, useState, type DragEvent, type PointerEvent, type ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,7 @@ import { ConfirmAction } from "@/components/ConfirmAction";
 import { heroFallback, aboutFallback, contactFallback, homeStatsFallback, useStudentGroups, type StudentGroup } from "@/lib/content";
 import { optimizedImageUrl } from "@/lib/images";
 import { cn } from "@/lib/utils";
+import { seoHead } from "@/lib/seo";
 import {
   education,
   experience,
@@ -44,7 +46,12 @@ import {
 } from "@/lib/site-data";
 
 export const Route = createFileRoute("/admin")({
-  head: () => ({ meta: [{ title: "Admin Dashboard" }] }),
+  head: () => seoHead({
+    title: "Admin Dashboard - Dr. Jimrise Ochwach",
+    description: "Private admin dashboard for managing Dr. Jimrise Ochwach's academic website.",
+    path: "/admin",
+    noIndex: true,
+  }),
   component: AdminPage,
 });
 
@@ -276,6 +283,11 @@ function AdminDashboard({ onSelect }: { onSelect: (id: string) => void }) {
     { label: "Restricted Users", value: data?.counts.blockedUsers ?? 0, icon: ShieldCheck, target: "users", detail: "Suspended or blocked" },
   ];
 
+  const openSection = (target: string) => {
+    onSelect(target);
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+  };
+
   return (
     <div className="space-y-6">
       <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -285,7 +297,7 @@ function AdminDashboard({ onSelect }: { onSelect: (id: string) => void }) {
             <button
               key={stat.label}
               type="button"
-              onClick={() => onSelect(stat.target)}
+              onClick={() => openSection(stat.target)}
               className="group text-left rounded-xl border border-border bg-card p-5 hover:border-gold/60 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60 transition-all"
               aria-label={`Open ${stat.label}`}
             >
@@ -294,6 +306,7 @@ function AdminDashboard({ onSelect }: { onSelect: (id: string) => void }) {
                   <p className="text-xs uppercase tracking-widest text-muted-foreground font-semibold">{stat.label}</p>
                   <p className="font-serif text-3xl font-bold text-navy-deep mt-2">{isLoading ? "..." : stat.value}</p>
                   <p className="text-xs text-muted-foreground mt-1">{stat.detail}</p>
+                  <p className="mt-3 text-xs font-semibold text-gold opacity-0 group-hover:opacity-100 transition-opacity">Open section</p>
                 </div>
                 <span className="w-10 h-10 rounded-lg bg-gold/15 flex items-center justify-center text-gold group-hover:bg-gold group-hover:text-navy-deep transition-colors">
                   <Icon size={19} />
@@ -2386,12 +2399,13 @@ function formatEducationLevel(value: string) {
 function BlogsAdmin() {
   const qc = useQueryClient();
   const { data, isLoading } = useList("blog_posts");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const invalidate = () => { qc.invalidateQueries({ queryKey: ["admin", "blog_posts"] }); qc.invalidateQueries({ queryKey: ["blogs"] }); };
 
   const add = async () => {
     const title = "New insight";
     const slug = `${slugify(title)}-${Date.now()}`;
-    const { error } = await supabase.from("blog_posts" as any).insert({
+    const { data: created, error } = await supabase.from("blog_posts" as any).insert({
       title,
       slug,
       excerpt: "",
@@ -2399,9 +2413,15 @@ function BlogsAdmin() {
       author_name: "Dr. Jimrise Ochwach, PhD",
       status: "draft",
       sort_order: 0,
-    });
-    if (error) toast.error(error.message); else invalidate();
+    }).select("id").single();
+    if (error) toast.error(error.message); else {
+      invalidate();
+      setEditingId((created as any)?.id ?? null);
+    }
   };
+
+  const posts = (data ?? []) as BlogPost[];
+  const editingPost = posts.find((post) => post.id === editingId) ?? null;
 
   return (
     <Card>
@@ -2417,12 +2437,25 @@ function BlogsAdmin() {
         </div>
         {isLoading ? (
           <p className="text-muted-foreground">Loading insights...</p>
-        ) : (
+        ) : editingPost ? (
           <div className="space-y-4">
-            {(data ?? []).map((b: any) => (
-              <BlogPostEditor key={b.id} post={b} onSaved={invalidate} />
+            <div className="flex items-center justify-between gap-3 rounded-lg border bg-secondary/30 p-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gold">Editing Insight</p>
+                <p className="font-serif text-lg font-semibold text-navy-deep">{editingPost.title}</p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditingId(null)}>
+                Back to cards
+              </Button>
+            </div>
+            <BlogPostEditor post={editingPost} onSaved={invalidate} />
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {posts.map((post) => (
+              <InsightAdminCard key={post.id} post={post} onEdit={() => setEditingId(post.id)} />
             ))}
-            {(data ?? []).length === 0 && (
+            {posts.length === 0 && (
               <p className="text-sm text-muted-foreground italic">No insights yet.</p>
             )}
           </div>
@@ -2443,7 +2476,57 @@ type BlogPost = {
   author_name?: string | null;
   status: "draft" | "published";
   sort_order: number;
+  published_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
 };
+
+function InsightAdminCard({ post, onEdit }: { post: BlogPost; onEdit: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onEdit}
+      className="group overflow-hidden rounded-lg border bg-background text-left shadow-sm transition-all hover:-translate-y-1 hover:border-gold hover:shadow-lg"
+    >
+      <div className="aspect-[16/9] overflow-hidden bg-secondary">
+        {post.cover_image_url ? (
+          <img
+            src={optimizedImageUrl(post.cover_image_url, 600)}
+            alt=""
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+            No hero image
+          </div>
+        )}
+      </div>
+      <div className="space-y-3 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <Badge className={cn(
+            "capitalize",
+            post.status === "published" ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : "bg-amber-100 text-amber-800 hover:bg-amber-100",
+          )}>
+            {post.status}
+          </Badge>
+          <span className="text-xs text-muted-foreground">{formatDate(post.updated_at ?? post.published_at ?? post.created_at)}</span>
+        </div>
+        <div>
+          <h4 className="font-serif text-lg font-semibold leading-tight text-navy-deep group-hover:text-gold transition-colors">
+            {post.title}
+          </h4>
+          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-gold">
+            {post.author_name ?? "Dr. Jimrise Ochwach, PhD"}
+          </p>
+        </div>
+        {post.excerpt && <p className="line-clamp-2 text-sm text-muted-foreground">{post.excerpt}</p>}
+        <span className="inline-flex text-sm font-semibold text-navy-deep group-hover:text-gold">Open editor</span>
+      </div>
+    </button>
+  );
+}
 
 function BlogPostEditor({ post, onSaved }: { post: BlogPost; onSaved: () => void }) {
   const editorRef = useRef<HTMLDivElement | null>(null);

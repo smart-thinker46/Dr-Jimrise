@@ -9,13 +9,15 @@ import { Layout, PageHeader } from "@/components/Layout";
 import { toast } from "sonner";
 import { contactFallback, normalizeContactContent, type ContactContent } from "@/lib/content";
 import { supabase } from "@/integrations/supabase/client";
+import { seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/contact")({
   head: () => ({
-    meta: [
-      { title: "Contact — Dr. Jimrise Ochwach" },
-      { name: "description", content: "Get in touch for research collaboration, supervision enquiries, or student questions." },
-    ],
+    ...seoHead({
+      title: "Contact Dr. Jimrise Ochwach - Research, Teaching & Supervision",
+      description: "Contact Dr. Jimrise Ochwach for research collaboration, student enquiries, postgraduate supervision, and academic communication.",
+      path: "/contact",
+    }),
   }),
   component: ContactPage,
 });

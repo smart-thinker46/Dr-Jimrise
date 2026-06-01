@@ -8,13 +8,15 @@ import { courses as coursesFallback } from "@/lib/site-data";
 import { ResourceDirectoryItem, useAnnouncements, useResourceDirectory, useSiteContent } from "@/lib/content";
 import { cn } from "@/lib/utils";
 import { useAuth, useUserAccessStatus } from "@/hooks/use-auth";
+import { seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/resources")({
   head: () => ({
-    meta: [
-      { title: "Student Resources — Dr. Jimrise Ochwach" },
-      { name: "description", content: "Lecture notes, past papers, assignments and announcements for students." },
-    ],
+    ...seoHead({
+      title: "Student Resources - Dr. Jimrise Ochwach",
+      description: "Access student resources, lecture notes, past papers, assignments, announcements, and course materials from Dr. Jimrise Ochwach.",
+      path: "/resources",
+    }),
   }),
   component: ResourcesPage,
 });

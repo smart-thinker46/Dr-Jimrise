@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import jimriseIcon from "../assets/jimriseicon.png?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
+import { defaultDescription, defaultTitle, personSchema, seoHead, siteName, websiteSchema } from "@/lib/seo";
 
 function NotFoundComponent() {
   return (
@@ -79,25 +80,24 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Dr. Jimrise Ochwach, PhD — Applied Mathematics" },
-      { name: "description", content: "Personal academic site of Dr. Jimrise Ochwach, Lecturer in Applied Mathematics at Mama Ngina University College — research, publications, supervision and student resources." },
-      { name: "author", content: "Dr. Jimrise Ochwach" },
-      { property: "og:title", content: "Dr. Jimrise Ochwach, PhD — Applied Mathematics" },
-      { property: "og:description", content: "Personal academic site of Dr. Jimrise Ochwach, Lecturer in Applied Mathematics at Mama Ngina University College — research, publications, supervision and student resources." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
-      { name: "twitter:title", content: "Dr. Jimrise Ochwach, PhD — Applied Mathematics" },
-      { name: "twitter:description", content: "Personal academic site of Dr. Jimrise Ochwach, Lecturer in Applied Mathematics at Mama Ngina University College — research, publications, supervision and student resources." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/5a39d270-13a7-488b-8a51-c85cce510f04/id-preview-d684a0dc--baf98a44-534c-4c38-abb1-29dc728a4523.lovable.app-1780075469112.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/5a39d270-13a7-488b-8a51-c85cce510f04/id-preview-d684a0dc--baf98a44-534c-4c38-abb1-29dc728a4523.lovable.app-1780075469112.png" },
+      { name: "theme-color", content: "#1a2e4a" },
+      { name: "application-name", content: siteName },
+      { name: "keywords", content: "Dr Jimrise Ochwach, Applied Mathematics, Mama Ngina University College, mathematical modelling, epidemiology, fluid dynamics, data science, Kenya lecturer" },
+      ...seoHead({ title: defaultTitle, description: defaultDescription }).meta,
     ],
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", type: "image/png", href: jimriseIcon },
       { rel: "apple-touch-icon", href: jimriseIcon },
+      { rel: "manifest", href: "/site.webmanifest" },
+      ...seoHead().links,
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" },
+    ],
+    scripts: [
+      { type: "application/ld+json", children: JSON.stringify(personSchema) },
+      { type: "application/ld+json", children: JSON.stringify(websiteSchema) },
     ],
   }),
   shellComponent: RootShell,

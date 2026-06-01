@@ -14,9 +14,15 @@ import { DashboardShell, type DashboardNavItem } from "@/components/DashboardShe
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/student")({
-  head: () => ({ meta: [{ title: "Student Dashboard" }] }),
+  head: () => seoHead({
+    title: "Student Dashboard - Dr. Jimrise Ochwach",
+    description: "Private student dashboard for course resources, announcements, messages, and profile settings.",
+    path: "/student",
+    noIndex: true,
+  }),
   component: StudentPage,
 });
 

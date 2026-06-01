@@ -11,9 +11,15 @@ import { toast } from "sonner";
 import { useAuth, useUserRole } from "@/hooks/use-auth";
 import { Eye, EyeOff } from "lucide-react";
 import { useStudentGroups } from "@/lib/content";
+import { seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/auth")({
-  head: () => ({ meta: [{ title: "Sign in — Dr. Jimrise Ochwach" }] }),
+  head: () => seoHead({
+    title: "Sign in - Dr. Jimrise Ochwach",
+    description: "Sign in to access the Dr. Jimrise Ochwach student resource dashboard.",
+    path: "/auth",
+    noIndex: true,
+  }),
   component: AuthPage,
 });
 

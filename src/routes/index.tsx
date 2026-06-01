@@ -18,13 +18,17 @@ import {
   type HomeStatsContent,
 } from "@/lib/content";
 import { optimizedImageSrcSet, optimizedImageUrl } from "@/lib/images";
+import { seoHead } from "@/lib/seo";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
   head: () => ({
-    meta: [
-      { title: "Dr. Jimrise Ochwach, PhD — Applied Mathematics" },
-      { name: "description", content: "Lecturer in Applied Mathematics at Mama Ngina University College. Research in mathematical modelling, epidemiology, fluid dynamics and data science." },
-    ],
+    ...seoHead({
+      title: "Dr. Jimrise Ochwach, PhD - Applied Mathematics Lecturer in Kenya",
+      description: "Lecturer in Applied Mathematics at Mama Ngina University College. Explore research in mathematical modelling, epidemiology, fluid dynamics, data science, and student resources.",
+      path: "/",
+      type: "profile",
+    }),
   }),
   component: Home,
 });
@@ -57,7 +61,7 @@ function Home() {
   ];
   const latestAnnouncements = announcements.slice(0, 2);
   const latestResources = resources.slice(0, 3);
-  const latestBlogs = blogs.slice(0, 2);
+  const latestBlogs = blogs.slice(0, 9);
 
   return (
     <Layout plain>
@@ -237,17 +241,17 @@ function Home() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="lg:col-span-3">
               <CardContent className="pt-6">
                 <div className="flex items-center gap-2 mb-4">
                   <PenLine size={18} className="text-gold" />
                   <h3 className="font-serif text-lg font-semibold text-navy-deep">Latest Insights</h3>
                 </div>
-                <div className="grid gap-3">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {latestBlogs.length > 0 ? latestBlogs.map((post) => (
-                    <Link key={post.id} to="/blogs/$slug" params={{ slug: post.slug }} className="group overflow-hidden rounded-lg border bg-background hover:border-gold hover:shadow-md transition-all">
-                      {post.cover_image_url && (
-                        <div className="aspect-[16/9] overflow-hidden bg-secondary">
+                    <Link key={post.id} to="/blogs/$slug" params={{ slug: post.slug }} className="group flex h-full flex-col overflow-hidden rounded-lg border bg-background hover:border-gold hover:shadow-md transition-all">
+                      <div className="aspect-[16/9] overflow-hidden bg-secondary">
+                        {post.cover_image_url ? (
                           <img
                             src={optimizedImageUrl(post.cover_image_url, 600)}
                             alt=""
@@ -255,12 +259,18 @@ function Home() {
                             loading="lazy"
                             decoding="async"
                           />
-                        </div>
-                      )}
-                      <div className="p-3">
-                        <p className="text-sm font-semibold text-navy-deep group-hover:text-gold transition-colors">{post.title}</p>
+                        ) : (
+                          <div className="flex h-full items-center justify-center bg-secondary/70 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Insight
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-1 flex-col p-3">
+                        <p className="line-clamp-2 min-h-10 text-sm font-semibold text-navy-deep group-hover:text-gold transition-colors">{post.title}</p>
                         <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-gold">{post.author_name ?? "Dr. Jimrise Ochwach, PhD"}</p>
-                        {post.excerpt && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{post.excerpt}</p>}
+                        <p className={cn("mt-1 line-clamp-2 min-h-8 text-xs text-muted-foreground", !post.excerpt && "invisible")}>
+                          {post.excerpt || "No excerpt"}
+                        </p>
                       </div>
                     </Link>
                   )) : <p className="text-sm text-muted-foreground">No published insights yet.</p>}

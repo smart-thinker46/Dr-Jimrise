@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { Menu, X, LogIn, LayoutDashboard, LogOut, Mail, Instagram, Facebook, MessageCircle } from "lucide-react";
+import { Menu, X, LogIn, LayoutDashboard, LogOut, Mail, Instagram, Facebook, MessageCircle, ChevronDown } from "lucide-react";
 import { navLinks } from "@/lib/site-data";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -76,15 +76,36 @@ export function Navbar() {
         <ul className="hidden lg:flex items-center gap-1">
           {navLinks.map((l) => (
             <li key={l.to}>
-              <a
-                href={l.to}
-                className={cn(
-                  "relative px-3 py-2 text-sm font-medium text-cream/85 hover:text-gold transition-colors",
-                  isActiveNav(pathname, l.to) && "text-gold"
-                )}
-              >
-                {l.label}
-              </a>
+              {l.to === "/research" ? (
+                <div className="group relative">
+                  <a
+                    href={l.to}
+                    className={cn(
+                      "relative inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-cream/85 hover:text-gold transition-colors",
+                      (isActiveNav(pathname, l.to) || isActiveNav(pathname, "/blogs")) && "text-gold"
+                    )}
+                  >
+                    {l.label}
+                    <ChevronDown size={14} className="transition-transform group-hover:rotate-180" />
+                  </a>
+                  <div className="invisible absolute left-0 top-full w-56 pt-2 opacity-0 translate-y-1 transition-all group-hover:visible group-hover:opacity-100 group-hover:translate-y-0">
+                    <div className="overflow-hidden rounded-md border border-cream/10 bg-navy-deep shadow-xl">
+                      <a href="/research" className="block px-4 py-3 text-sm text-cream/85 hover:bg-cream/5 hover:text-gold">Research Overview</a>
+                      <a href="/blogs" className="block px-4 py-3 text-sm text-cream/85 hover:bg-cream/5 hover:text-gold">Insights</a>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <a
+                  href={l.to}
+                  className={cn(
+                    "relative px-3 py-2 text-sm font-medium text-cream/85 hover:text-gold transition-colors",
+                    isActiveNav(pathname, l.to) && "text-gold"
+                  )}
+                >
+                  {l.label}
+                </a>
+              )}
             </li>
           ))}
           <li className="ml-3 flex items-center gap-2">
@@ -123,6 +144,18 @@ export function Navbar() {
                 >
                   {l.label}
                 </a>
+                {l.to === "/research" && (
+                  <a
+                    href="/blogs"
+                    onClick={() => setOpen(false)}
+                    className={cn(
+                      "ml-4 mt-1 block rounded-md px-3 py-2 text-sm text-cream/70 hover:bg-cream/5 hover:text-gold",
+                      isActiveNav(pathname, "/blogs") && "text-gold bg-cream/5"
+                    )}
+                  >
+                    Insights
+                  </a>
+                )}
               </li>
             ))}
             <li className="pt-2 border-t border-cream/10 mt-2">

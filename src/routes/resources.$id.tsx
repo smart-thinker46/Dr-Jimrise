@@ -6,9 +6,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Layout, PageHeader } from "@/components/Layout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useUserAccessStatus } from "@/hooks/use-auth";
+import { seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/resources/$id")({
-  head: () => ({ meta: [{ title: "View Resource — Dr. Jimrise Ochwach" }] }),
+  head: ({ params }) => seoHead({
+    title: "Student Resource - Dr. Jimrise Ochwach",
+    description: "View a student resource shared by Dr. Jimrise Ochwach.",
+    path: `/resources/${params.id}`,
+    noIndex: true,
+  }),
   component: ResourceViewerPage,
 });
 

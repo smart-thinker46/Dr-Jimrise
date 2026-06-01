@@ -9,15 +9,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Layout, PageHeader } from "@/components/Layout";
 import { grants as grantsFallback } from "@/lib/site-data";
 import { useAllPublications, useSiteContent, useSupervision, type Publication } from "@/lib/content";
+import { seoHead } from "@/lib/seo";
 
 const PUBLICATIONS_PER_PAGE = 8;
 
 export const Route = createFileRoute("/research")({
   head: () => ({
-    meta: [
-      { title: "Research & Publications — Dr. Jimrise Ochwach" },
-      { name: "description", content: "Journal articles, conference papers, postgraduate supervision, and active research grants." },
-    ],
+    ...seoHead({
+      title: "Research & Publications - Dr. Jimrise Ochwach, PhD",
+      description: "Journal articles, conference papers, research grants, and postgraduate supervision by Dr. Jimrise Ochwach in applied mathematics and mathematical modelling.",
+      path: "/research",
+    }),
   }),
   component: ResearchPage,
 });

@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /student
+Disallow: /auth
+Disallow: /reset-password
+Disallow: /resources/
+
+Sitemap: https://dr-jimrise.vercel.app/sitemap.xml

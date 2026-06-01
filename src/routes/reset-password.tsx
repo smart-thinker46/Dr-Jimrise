@@ -8,9 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/reset-password")({
-  head: () => ({ meta: [{ title: "Reset password — Dr. Jimrise Ochwach" }] }),
+  head: () => seoHead({
+    title: "Reset Password - Dr. Jimrise Ochwach",
+    description: "Reset access to your Dr. Jimrise Ochwach student account.",
+    path: "/reset-password",
+    noIndex: true,
+  }),
   component: ResetPasswordPage,
 });
 

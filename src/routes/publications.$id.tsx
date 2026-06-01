@@ -5,9 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Layout, PageHeader } from "@/components/Layout";
 import { supabase } from "@/integrations/supabase/client";
+import { seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/publications/$id")({
-  head: () => ({ meta: [{ title: "Read Publication — Dr. Jimrise Ochwach" }] }),
+  head: ({ params }) => seoHead({
+    title: "Read Publication - Dr. Jimrise Ochwach",
+    description: "Read a research publication by Dr. Jimrise Ochwach and collaborators.",
+    path: `/publications/${params.id}`,
+    type: "article",
+  }),
   component: PublicationReaderPage,
 });
 
