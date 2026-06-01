@@ -47,7 +47,7 @@ function BlogPostPage() {
 
   return (
     <Layout plain>
-      <PageHeader eyebrow="Writing" title={post.title} subtitle={post.excerpt ?? undefined} />
+      <PageHeader eyebrow="Writing" title={post.title} />
       <article className="py-14 md:py-20 bg-background">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 flex items-center justify-between gap-4 text-sm text-muted-foreground">

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { ArrowRight, CalendarDays, FilePenLine } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,11 @@ export const Route = createFileRoute("/blogs")({
 
 function BlogsPage() {
   const { data: posts = [], isLoading } = useBlogs();
+  const isReadingPage = useRouterState({
+    select: (state) => state.location.pathname !== "/blogs" && state.location.pathname.startsWith("/blogs/"),
+  });
+
+  if (isReadingPage) return <Outlet />;
 
   return (
     <Layout plain>
@@ -40,7 +45,7 @@ function BlogsPage() {
           ) : (
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
               {posts.map((post) => (
-                <Link key={post.id} to="/blogs/$slug" params={{ slug: post.slug }} className="group block h-full">
+                <Link key={post.id} to="/blogs/$slug" params={{ slug: post.slug || post.id }} className="group block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2">
                   <Card className="flex h-full flex-col overflow-hidden hover:border-gold hover:shadow-xl hover:-translate-y-1 transition-all">
                     <div className="aspect-[16/9] overflow-hidden bg-secondary">
                       {post.cover_image_url ? (

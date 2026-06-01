@@ -75,7 +75,7 @@ export type ResourceDirectoryItem = {
 export type BlogPost = {
   id: string;
   title: string;
-  slug: string;
+  slug: string | null;
   excerpt: string | null;
   content: string;
   cover_image_url?: string | null;
@@ -427,7 +427,15 @@ export function useBlog(slug: string) {
         .eq("slug", slug)
         .eq("status", "published")
         .maybeSingle();
-      return data as BlogPost | null;
+      if (data) return data as BlogPost;
+
+      const { data: fallbackData } = await supabase
+        .from("blog_posts" as any)
+        .select("*")
+        .eq("id", slug)
+        .eq("status", "published")
+        .maybeSingle();
+      return fallbackData as BlogPost | null;
     },
     initialData: null,
   });

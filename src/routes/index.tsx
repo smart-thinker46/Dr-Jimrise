@@ -249,7 +249,7 @@ function Home() {
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {latestBlogs.length > 0 ? latestBlogs.map((post) => (
-                    <Link key={post.id} to="/blogs/$slug" params={{ slug: post.slug }} className="group flex h-full flex-col overflow-hidden rounded-lg border bg-background hover:border-gold hover:shadow-md transition-all">
+                    <Link key={post.id} to="/blogs/$slug" params={{ slug: post.slug || post.id }} className="group flex h-full flex-col overflow-hidden rounded-lg border bg-background hover:border-gold hover:shadow-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2">
                       <div className="aspect-[16/9] overflow-hidden bg-secondary">
                         {post.cover_image_url ? (
                           <img
