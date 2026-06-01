@@ -5,6 +5,7 @@ import { Layout, PageHeader } from "@/components/Layout";
 import { useBlog } from "@/lib/content";
 import { optimizedImageUrl } from "@/lib/images";
 import { seoHead } from "@/lib/seo";
+import { sanitizeHtml } from "@/lib/security";
 
 export const Route = createFileRoute("/blogs/$slug")({
   head: ({ params }) => ({
@@ -75,7 +76,7 @@ function BlogPostPage() {
           </p>
           <div
             className="blog-content text-foreground leading-relaxed"
-            dangerouslySetInnerHTML={{ __html: enhanceBlogImages(post.content) }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(enhanceBlogImages(post.content)) }}
           />
         </div>
       </article>

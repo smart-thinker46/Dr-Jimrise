@@ -35,6 +35,7 @@ import { heroFallback, aboutFallback, contactFallback, homeStatsFallback, useStu
 import { optimizedImageUrl } from "@/lib/images";
 import { cn } from "@/lib/utils";
 import { seoHead } from "@/lib/seo";
+import { safeUrl } from "@/lib/security";
 import {
   education,
   experience,
@@ -83,7 +84,7 @@ const NAV: DashboardNavItem[] = [
 function AdminPage() {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
-  const { data: role, isLoading: roleLoading, refetch } = useUserRole(user);
+  const { data: role, isLoading: roleLoading } = useUserRole(user);
   const [active, setActive] = useState("dashboard");
 
   useEffect(() => {
@@ -103,13 +104,7 @@ function AdminPage() {
           <CardContent className="pt-6 space-y-4 text-sm">
             <h2 className="font-serif text-xl font-bold text-navy-deep">Admin access required</h2>
             <p>You are signed in as <strong>{user.email}</strong> but don't have admin privileges.</p>
-            <p className="text-muted-foreground">If no admin has been set up yet, you can claim the role (this only works for the very first admin).</p>
-            <Button className="w-full bg-gold text-navy-deep hover:bg-gold-soft" onClick={async () => {
-              const { data, error } = await supabase.rpc("bootstrap_admin");
-              if (error) toast.error(error.message);
-              else if (data) { toast.success("You are now admin!"); refetch(); }
-              else toast.error("An admin already exists.");
-            }}><ShieldCheck size={16} className="mr-2" /> Claim admin role</Button>
+            <p className="text-muted-foreground">Admin access is restricted. Ask the existing administrator to assign your role from the dashboard.</p>
             <Button variant="outline" className="w-full" asChild><Link to="/student">Go to student dashboard</Link></Button>
             <Button variant="ghost" className="w-full" asChild><Link to="/">Back to site</Link></Button>
           </CardContent>
@@ -589,11 +584,78 @@ function AnnouncementsAdmin() {
     } as any);
     if (error) toast.error(error.message); else invalidate();
   };
+  const announcements = data ?? [];
   return (
     <ListSection title="Announcements" onAdd={add}>
       {isLoading ? <p className="py-6 text-sm text-muted-foreground">Loading announcements...</p> : null}
-      {(data ?? []).map((a: any) => <AnnouncementEditor key={a.id} row={a} groups={groups} onChange={invalidate} />)}
+      {!isLoading && announcements.length === 0 && (
+        <div className="rounded-lg border border-dashed border-border bg-secondary/20 p-6 text-center">
+          <Megaphone className="mx-auto mb-2 text-gold" size={26} />
+          <p className="font-serif text-lg font-semibold text-navy-deep">No announcements yet.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Create the first notice and choose whether it goes to everyone or selected groups.</p>
+        </div>
+      )}
+      {announcements.length > 0 && (
+        <div className="rounded-lg border border-border bg-secondary/20 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-gold">Announcement audience overview</p>
+              <h4 className="font-serif text-lg font-semibold text-navy-deep">All announcements made</h4>
+            </div>
+            <Badge className="bg-navy-deep text-cream hover:bg-navy-deep">{announcements.length} total</Badge>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="py-2 pr-3 font-semibold">Announcement</th>
+                  <th className="px-3 py-2 font-semibold">Date</th>
+                  <th className="px-3 py-2 font-semibold">Audience</th>
+                  <th className="py-2 pl-3 font-semibold">Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {announcements.map((announcement: any) => (
+                  <tr key={announcement.id} className="border-b border-border/70 last:border-0">
+                    <td className="py-3 pr-3">
+                      <p className="font-semibold text-navy-deep">{announcement.title || "Untitled announcement"}</p>
+                      <p className="mt-1 line-clamp-1 max-w-xl text-xs text-muted-foreground">{announcement.body || "No message body yet."}</p>
+                    </td>
+                    <td className="px-3 py-3 text-muted-foreground">{announcement.date || "Not set"}</td>
+                    <td className="px-3 py-3">
+                      <AnnouncementAudienceBadge announcement={announcement} />
+                    </td>
+                    <td className="py-3 pl-3 text-xs text-muted-foreground">{formatDate(announcement.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      {announcements.map((a: any) => <AnnouncementEditor key={a.id} row={a} groups={groups} onChange={invalidate} />)}
     </ListSection>
+  );
+}
+
+function AnnouncementAudienceBadge({ announcement }: { announcement: any }) {
+  const groupNames = announcement.group_names ?? [];
+  if ((announcement.target_scope ?? "general") === "general") {
+    return <span className="inline-flex rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-700">Everyone</span>;
+  }
+
+  if (groupNames.length === 0) {
+    return <span className="inline-flex rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-destructive">No group selected</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {groupNames.map((group: string) => (
+        <span key={group} className="rounded-full bg-gold/15 px-2.5 py-1 text-xs font-semibold text-navy-deep">
+          {group}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -3126,9 +3188,7 @@ function BlogPostEditor({ post, onSaved }: { post: BlogPost; onSaved: () => void
     value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
 
   const normalizeUrl = (url: string) => {
-    if (!url || url === "#") return "#";
-    if (/^(https?:|mailto:|tel:)/i.test(url)) return url;
-    return `https://${url}`;
+    return safeUrl(url, "#");
   };
 
   const addLink = () => {

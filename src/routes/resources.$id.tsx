@@ -7,6 +7,7 @@ import { Layout, PageHeader } from "@/components/Layout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useUserAccessStatus } from "@/hooks/use-auth";
 import { seoHead } from "@/lib/seo";
+import { getSignedStorageUrl } from "@/lib/storage";
 
 export const Route = createFileRoute("/resources/$id")({
   head: ({ params }) => seoHead({
@@ -34,8 +35,14 @@ function ResourceViewerPage() {
       return data as any;
     },
   });
+  const { data: signedFileUrl, isLoading: signingFile } = useQuery({
+    queryKey: ["resource", id, "signed-file", resource?.file_url ?? null],
+    enabled: !!resource?.file_url,
+    queryFn: () => getSignedStorageUrl("resources", resource.file_url, 60 * 10),
+    staleTime: 60 * 8,
+  });
 
-  if (isLoading || authLoading) {
+  if (isLoading || authLoading || signingFile) {
     return (
       <Layout plain>
         <PageHeader eyebrow="Resource" title="Loading resource" />
@@ -91,7 +98,8 @@ function ResourceViewerPage() {
     );
   }
 
-  const viewerUrl = getViewerUrl(resource.file_url, resource.type);
+  const fileUrl = signedFileUrl || resource.file_url;
+  const viewerUrl = getViewerUrl(fileUrl, resource.type);
 
   return (
     <Layout plain>
@@ -104,7 +112,7 @@ function ResourceViewerPage() {
             </Button>
             {resource.allow_download !== false && (
               <Button asChild className="bg-navy-deep text-cream hover:bg-navy">
-                <a href={resource.file_url} target="_blank" rel="noreferrer" download>
+                <a href={fileUrl} target="_blank" rel="noreferrer" download>
                   <ExternalLink size={16} className="mr-2" />Download
                 </a>
               </Button>

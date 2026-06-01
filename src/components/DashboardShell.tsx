@@ -21,6 +21,7 @@ export type DashboardNavItem = {
   id: string;
   label: string;
   icon: LucideIcon;
+  badge?: number;
   children?: DashboardNavItem[];
 };
 
@@ -160,6 +161,14 @@ export function DashboardShell({
                 >
                   <Icon size={16} />
                   <span className="flex-1">{item.label}</span>
+                  {Number(item.badge) > 0 && (
+                    <span className={cn(
+                      "min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold leading-none",
+                      isActive ? "bg-navy-deep text-cream" : "bg-gold text-navy-deep"
+                    )}>
+                      {formatBadgeCount(item.badge)}
+                    </span>
+                  )}
                   {hasChildren && (
                     <ChevronDown size={15} className={cn("transition-transform", isOpen && "rotate-180")} />
                   )}
@@ -181,7 +190,15 @@ export function DashboardShell({
                           )}
                         >
                           <ChildIcon size={14} />
-                          {child.label}
+                          <span className="flex-1">{child.label}</span>
+                          {Number(child.badge) > 0 && (
+                            <span className={cn(
+                              "min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold leading-none",
+                              isChildActive ? "bg-navy-deep text-cream" : "bg-gold text-navy-deep"
+                            )}>
+                              {formatBadgeCount(child.badge)}
+                            </span>
+                          )}
                         </button>
                       );
                     })}
@@ -381,6 +398,14 @@ export function DashboardShell({
                   >
                     <Icon size={14} />
                     {item.label}
+                    {Number(item.badge) > 0 && (
+                      <span className={cn(
+                        "ml-0.5 min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold leading-none",
+                        isActive ? "bg-gold text-navy-deep" : "bg-navy-deep text-cream"
+                      )}>
+                        {formatBadgeCount(item.badge)}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -392,6 +417,12 @@ export function DashboardShell({
       </div>
     </div>
   );
+}
+
+function formatBadgeCount(value?: number) {
+  const count = Number(value ?? 0);
+  if (count > 99) return "99+";
+  return String(count);
 }
 
 type DashboardProfile = {

@@ -17,6 +17,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { seoHead } from "@/lib/seo";
 import { ConfirmAction } from "@/components/ConfirmAction";
+import { safeUrl } from "@/lib/security";
 
 export const Route = createFileRoute("/student")({
   head: () => seoHead({
@@ -59,8 +60,51 @@ function StudentPage() {
     staleTime: 5_000,
     refetchInterval: 15_000,
   });
+  const { data: assignmentCounterTasks = [] } = useQuery({
+    queryKey: ["student", "assignment_task_counter", user?.id ?? null],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("assignment_tasks" as any)
+        .select("id,created_at,updated_at")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user,
+  });
+  const { data: assignmentCounterSubmissions = [] } = useQuery({
+    queryKey: ["student", "assignment_submission_counter", user?.id ?? null],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("assignment_submissions" as any)
+        .select("id,reviewed_at,submitted_at")
+        .eq("student_id", user!.id)
+        .order("submitted_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user,
+  });
+  const { data: messageCounterItems = [] } = useQuery({
+    queryKey: ["student", "contact_message_counter", user?.id ?? null, user?.email ?? null],
+    queryFn: async () => {
+      const normalizedEmail = (user?.email ?? "").trim().toLowerCase();
+      const visibilityFilter = normalizedEmail
+        ? `sender_user_id.eq.${user!.id},email.ilike.${normalizedEmail}`
+        : `sender_user_id.eq.${user!.id}`;
+      const { data, error } = await supabase
+        .from("contact_messages" as any)
+        .select("id,created_at,replied_at,admin_reply")
+        .or(visibilityFilter)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user,
+  });
   const [active, setActive] = useState("overview");
   const [query, setQuery] = useState("");
+  const [seenAt, setSeenAt] = useState<Record<string, string>>({});
   const items = announcements ?? [];
   const files = resources ?? [];
 
@@ -107,12 +151,43 @@ function StudentPage() {
         { event: "*", schema: "public", table: "announcement_group_access" },
         () => qc.invalidateQueries({ queryKey: ["announcements"] }),
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "assignment_tasks" },
+        () => qc.invalidateQueries({ queryKey: ["student", "assignment_task_counter", user.id] }),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "assignment_submissions", filter: `student_id=eq.${user.id}` },
+        () => qc.invalidateQueries({ queryKey: ["student", "assignment_submission_counter", user.id] }),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "contact_messages", filter: `sender_user_id=eq.${user.id}` },
+        () => qc.invalidateQueries({ queryKey: ["student", "contact_message_counter", user.id, user.email ?? null] }),
+      )
       .subscribe();
 
     return () => {
       void supabase.removeChannel(channel);
     };
   }, [qc, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    setSeenAt(loadStudentSidebarSeen(user.id));
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || active === "overview" || active === "admin-link") return;
+    const timestamp = new Date().toISOString();
+    setSeenAt((current) => {
+      if (current[active] && new Date(current[active]).getTime() >= new Date(timestamp).getTime()) return current;
+      const next = { ...current, [active]: timestamp };
+      saveStudentSidebarSeen(user.id, next);
+      return next;
+    });
+  }, [active, user]);
 
   const filteredFiles = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -126,9 +201,29 @@ function StudentPage() {
 
   const activeMeta = NAV.find((n) => n.id === active);
 
+  const sidebarCounters = useMemo(() => {
+    const assignmentEvents = [
+      ...assignmentCounterTasks.map((task: any) => ({ created_at: task.created_at ?? task.updated_at })),
+      ...assignmentCounterSubmissions
+        .filter((submission: any) => submission.reviewed_at)
+        .map((submission: any) => ({ created_at: submission.reviewed_at })),
+    ];
+    return {
+      announcements: unreadCount(items, seenAt.announcements, (item: any) => item.created_at),
+      resources: unreadCount(files, seenAt.resources, (item: any) => item.created_at),
+      assignments: unreadCount(assignmentEvents, seenAt.assignments, (item: any) => item.created_at),
+      messages: unreadCount(messageCounterItems, seenAt.messages, (item: any) => item.replied_at ?? item.created_at),
+    };
+  }, [assignmentCounterSubmissions, assignmentCounterTasks, files, items, messageCounterItems, seenAt]);
+
+  const studentNav: DashboardNavItem[] = NAV.map((item) => ({
+    ...item,
+    badge: sidebarCounters[item.id as keyof typeof sidebarCounters] ?? 0,
+  }));
+
   const nav: DashboardNavItem[] = role === "admin"
-    ? [...NAV, { id: "admin-link", label: "Admin Panel", icon: ShieldCheck }]
-    : NAV;
+    ? [...studentNav, { id: "admin-link", label: "Admin Panel", icon: ShieldCheck }]
+    : studentNav;
 
   const onSelect = (id: string) => {
     if (id === "admin-link") navigate({ to: "/admin" });
@@ -1254,12 +1349,42 @@ function getResourceAction(resource: any) {
   if (resource.allow_download === false) {
     return { kind: "internal", href: `/resources/${resource.id}`, label: "View", icon: "view", download: false };
   }
-  return { kind: "external", href: resource.file_url, label: "Download", icon: "download", download: true };
+  return { kind: "internal", href: `/resources/${resource.id}`, label: "Open", icon: "view", download: false };
 }
 
 function normalizeUrl(value?: string | null) {
-  const trimmed = value?.trim() ?? "";
-  if (!trimmed) return "";
-  if (/^(https?:|mailto:|tel:)/i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
+  return safeUrl(value, "");
+}
+
+function unreadCount<T>(items: T[], seenAt: string | undefined, getDate: (item: T) => string | null | undefined) {
+  if (!seenAt) return items.length;
+  const seenTime = new Date(seenAt).getTime();
+  if (!Number.isFinite(seenTime)) return items.length;
+  return items.filter((item) => {
+    const value = getDate(item);
+    if (!value) return false;
+    const itemTime = new Date(value).getTime();
+    return Number.isFinite(itemTime) && itemTime > seenTime;
+  }).length;
+}
+
+function studentSidebarSeenKey(userId: string) {
+  return `student_sidebar_seen:${userId}`;
+}
+
+function loadStudentSidebarSeen(userId: string) {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(studentSidebarSeenKey(userId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed as Record<string, string> : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveStudentSidebarSeen(userId: string, value: Record<string, string>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(studentSidebarSeenKey(userId), JSON.stringify(value));
 }

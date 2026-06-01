@@ -22,6 +22,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { ConfirmAction } from "@/components/ConfirmAction";
 import { useStudentGroups, type StudentGroup } from "@/lib/content";
+import { safeUrl } from "@/lib/security";
 
 type Resource = {
   id: string;
@@ -65,10 +66,7 @@ function inferType(name: string): string {
 }
 
 function normalizeUrl(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  if (/^(https?:|mailto:|tel:)/i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
+  return safeUrl(value, "");
 }
 
 function getResourceHref(resource: Resource) {

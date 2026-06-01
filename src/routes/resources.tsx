@@ -9,6 +9,7 @@ import { ResourceDirectoryItem, useAnnouncements, useResourceDirectory, useSiteC
 import { cn } from "@/lib/utils";
 import { useAuth, useUserAccessStatus } from "@/hooks/use-auth";
 import { seoHead } from "@/lib/seo";
+import { safeUrl } from "@/lib/security";
 
 export const Route = createFileRoute("/resources")({
   head: () => ({
@@ -215,12 +216,9 @@ function getResourceAction(resource: ResourceDirectoryItem, isLoggedIn: boolean)
   if (resource.allow_download === false) {
     return { kind: "internal", href: `/resources/${resource.id}`, label: "View", icon: "view", download: false };
   }
-  return { kind: "external", href: resource.file_url, label: "Download", icon: "download", download: true };
+  return { kind: "internal", href: `/resources/${resource.id}`, label: "Open", icon: "view", download: false };
 }
 
 function normalizeUrl(value?: string | null) {
-  const trimmed = value?.trim() ?? "";
-  if (!trimmed) return "";
-  if (/^(https?:|mailto:|tel:)/i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
+  return safeUrl(value, "");
 }
