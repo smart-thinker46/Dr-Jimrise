@@ -48,6 +48,7 @@ export function DashboardShell({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: profile, isLoading: profileLoading } = useDashboardProfile(userId);
+  const showStudentProfileFields = roleLabel.toLowerCase() !== "admin";
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
@@ -65,6 +66,7 @@ export function DashboardShell({
       organization_name: profile?.organization_name ?? "",
       education_level: profile?.education_level ?? "",
       program: profile?.program ?? "",
+      admission_number: profile?.admission_number ?? "",
     });
   }, [profile]);
 
@@ -93,6 +95,7 @@ export function DashboardShell({
       organization_name: profileForm.organization_name.trim(),
       education_level: profileForm.education_level,
       program: profileForm.program.trim(),
+      admission_number: showStudentProfileFields ? profileForm.admission_number.trim() : "",
       updated_at: new Date().toISOString(),
     };
     const { error } = await supabase.from("student_profiles" as any).upsert(payload);
@@ -264,6 +267,9 @@ export function DashboardShell({
                         <ProfileField label="Last Name" value={profileForm.last_name} onChange={(value) => setProfileForm((form) => ({ ...form, last_name: value }))} />
                       </div>
                       <ProfileField label="Organization" value={profileForm.organization_name} onChange={(value) => setProfileForm((form) => ({ ...form, organization_name: value }))} />
+                      {showStudentProfileFields && (
+                        <ProfileField label="Adm No:" value={profileForm.admission_number} onChange={(value) => setProfileForm((form) => ({ ...form, admission_number: value }))} />
+                      )}
                       <div>
                         <Label className="text-xs">Education Level</Label>
                         <select
@@ -289,6 +295,7 @@ export function DashboardShell({
                             organization_name: profile?.organization_name ?? "",
                             education_level: profile?.education_level ?? "",
                             program: profile?.program ?? "",
+                            admission_number: profile?.admission_number ?? "",
                           });
                           setEditingProfile(false);
                         }}>
@@ -301,6 +308,7 @@ export function DashboardShell({
                       <ProfileRow icon={User} label="Full Name" value={[profile?.first_name, profile?.last_name].filter(Boolean).join(" ")} fallback={profileLoading ? "Loading..." : "Not saved"} />
                       <ProfileRow icon={Mail} label="Email" value={userEmail} />
                       <ProfileRow icon={Building2} label="Organization" value={profile?.organization_name} />
+                      {showStudentProfileFields && <ProfileRow icon={GraduationCap} label="Adm No:" value={profile?.admission_number} />}
                       <ProfileRow icon={GraduationCap} label="Education Level" value={profile?.education_level ? formatEducationLevel(profile.education_level) : ""} />
                       <ProfileRow icon={BookOpen} label="Program" value={profile?.program} />
                     </div>
@@ -392,6 +400,7 @@ type DashboardProfile = {
   organization_name: string | null;
   education_level: string | null;
   program: string | null;
+  admission_number: string | null;
 };
 
 type DashboardProfileForm = {
@@ -400,6 +409,7 @@ type DashboardProfileForm = {
   organization_name: string;
   education_level: string;
   program: string;
+  admission_number: string;
 };
 
 const emptyProfileForm: DashboardProfileForm = {
@@ -408,6 +418,7 @@ const emptyProfileForm: DashboardProfileForm = {
   organization_name: "",
   education_level: "",
   program: "",
+  admission_number: "",
 };
 
 const educationLevelOptions = [
@@ -428,7 +439,7 @@ function useDashboardProfile(userId?: string) {
       if (!userId) return null;
       const { data, error } = await supabase
         .from("student_profiles" as any)
-        .select("first_name,last_name,organization_name,education_level,program")
+        .select("first_name,last_name,organization_name,education_level,program,admission_number")
         .eq("user_id", userId)
         .maybeSingle();
       if (error) throw error;

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { Component, useEffect, useRef, useState, type DragEvent, type PointerEvent, type ReactNode } from "react";
+import { Component, useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent, type ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ import {
   Bold, Italic, Underline, Link as LinkIcon, Image, MousePointerClick, Palette, List, ListOrdered, Quote,
   Database, LayoutDashboard, BarChart3, Bell, FileText, FileUp, GraduationCap, Activity, AlignLeft, AlignCenter, AlignRight,
   AlignJustify, Undo2, Redo2, Eraser, Minus, Table2, Heading1, Heading2, Pilcrow, Highlighter, MessageSquare, PhoneCall, ChevronDown,
-  Maximize2, Captions, PanelLeft, PanelRight, Link2,
+  Maximize2, Captions, PanelLeft, PanelRight, Link2, ClipboardList, Download, ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -75,6 +75,7 @@ const NAV: DashboardNavItem[] = [
   { id: "resources", label: "Resources", icon: FolderOpen },
   { id: "groups", label: "Groups", icon: Users },
   { id: "messages", label: "Messages", icon: MessageSquare },
+  { id: "assignments", label: "Assignments", icon: ClipboardList },
   { id: "users", label: "Users", icon: UserCog },
   { id: "blogs", label: "Insights", icon: FilePenLine },
 ];
@@ -163,6 +164,11 @@ function AdminPage() {
       {active === "resources" && <ResourcesAdmin />}
       {active === "groups" && <GroupsAdmin />}
       {active === "messages" && <ContactMessagesAdmin />}
+      {active === "assignments" && (
+        <SectionErrorBoundary section="Assignments">
+          <AssignmentsAdmin />
+        </SectionErrorBoundary>
+      )}
       {active === "publications" && <PublicationsAdmin />}
       {active === "supervision" && <SupervisionAdmin />}
       {active === "academic-data" && <AcademicDataAdmin />}
@@ -1382,6 +1388,7 @@ type AdminUser = {
   organization_name?: string | null;
   education_level?: string | null;
   program?: string | null;
+  admission_number?: string | null;
   group_id?: string | null;
   group_name?: string | null;
 };
@@ -1550,7 +1557,7 @@ type ContactMessage = {
   subject: string;
   message: string;
   sender_user_id?: string | null;
-  status: "unread" | "read";
+  status: "unread" | "read" | "replied";
   admin_reply?: string | null;
   replied_at?: string | null;
   replied_by?: string | null;
@@ -1599,10 +1606,10 @@ function ContactMessagesAdmin() {
       .some((value) => value.toLowerCase().includes(needle));
   });
 
-  const markStatus = async (id: string, status: "unread" | "read") => {
+  const markStatus = async (id: string, status: ContactMessage["status"]) => {
     const { error } = await supabase.from("contact_messages" as any).update({ status }).eq("id", id);
     if (error) return toast.error("Status update failed", { description: error.message });
-    toast.success(status === "read" ? "Message marked as read" : "Message marked as unread");
+    toast.success(messageStatusText(status));
     refresh();
   };
 
@@ -1614,10 +1621,12 @@ function ContactMessagesAdmin() {
   };
 
   const unread = data.filter((item) => item.status === "unread").length;
+  const replied = data.filter((item) => item.status === "replied" || item.admin_reply).length;
+  const read = Math.max(data.length - unread - replied, 0);
 
   return (
     <div className="space-y-5">
-      <div className="grid sm:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-5">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Total Messages</p>
@@ -1633,7 +1642,13 @@ function ContactMessagesAdmin() {
         <Card>
           <CardContent className="pt-5">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Read</p>
-            <p className="font-serif text-3xl font-bold text-navy-deep mt-1">{data.length - unread}</p>
+            <p className="font-serif text-3xl font-bold text-navy-deep mt-1">{read}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Replied</p>
+            <p className="font-serif text-3xl font-bold text-emerald-700 mt-1">{replied}</p>
           </CardContent>
         </Card>
       </div>
@@ -1668,7 +1683,7 @@ function ContactMessagesAdmin() {
                   key={item.id}
                   item={item}
                   onReplySaved={refresh}
-                  onToggleStatus={() => markStatus(item.id, item.status === "read" ? "unread" : "read")}
+                  onToggleStatus={() => markStatus(item.id, item.status === "unread" ? "read" : "unread")}
                   onDelete={() => remove(item)}
                 />
               ))}
@@ -1708,7 +1723,7 @@ function AdminMessageCard({
         admin_reply: reply.trim(),
         replied_at: new Date().toISOString(),
         replied_by: sessionData.session?.user.id ?? null,
-        status: "read",
+        status: "replied",
       })
       .eq("id", item.id);
     setSaving(false);
@@ -1723,17 +1738,12 @@ function AdminMessageCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-semibold text-navy-deep">{item.name}</p>
-            <span className={item.status === "unread" ? "rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-navy-deep" : "rounded-full bg-secondary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground"}>
-              {item.status}
+            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider", messageStatusClass(item))}>
+              {messageStatusLabel(item)}
             </span>
             {item.sender_user_id && (
               <span className="rounded-full bg-navy-deep/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-navy-deep">
                 Student dashboard
-              </span>
-            )}
-            {item.admin_reply && (
-              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                Replied
               </span>
             )}
             <span className="text-xs text-muted-foreground">{formatDate(item.created_at)}</span>
@@ -1773,7 +1783,7 @@ function AdminMessageCard({
             </a>
           </Button>
           <Button size="sm" variant="outline" onClick={onToggleStatus}>
-            Mark {item.status === "read" ? "unread" : "read"}
+            Mark {item.status === "unread" ? "read" : "unread"}
           </Button>
           <ConfirmAction
             title="Delete message?"
@@ -1802,6 +1812,490 @@ function formatMessageSubject(value: string) {
     supervision: "Supervision Interest",
   };
   return labels[value] ?? value;
+}
+
+function messageStatusLabel(item: ContactMessage) {
+  if (item.status === "replied" || item.admin_reply) return "Replied";
+  if (item.status === "read") return "Read";
+  return "Unread";
+}
+
+function messageStatusClass(item: ContactMessage) {
+  if (item.status === "replied" || item.admin_reply) return "bg-emerald-500/10 text-emerald-700";
+  if (item.status === "read") return "bg-secondary text-muted-foreground";
+  return "bg-gold/15 text-navy-deep";
+}
+
+function messageStatusText(status: ContactMessage["status"]) {
+  if (status === "replied") return "Message marked as replied";
+  if (status === "read") return "Message marked as read";
+  return "Message marked as unread";
+}
+
+type AssignmentTaskAdmin = {
+  id: string;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  file_url: string | null;
+  file_name: string | null;
+  target_scope: "all" | "group" | "user";
+  created_at: string;
+};
+
+type AssignmentSubmissionAdmin = {
+  id: string;
+  assignment_id: string;
+  student_id: string;
+  file_url: string | null;
+  file_name: string | null;
+  note: string | null;
+  status: "submitted" | "received" | "rejected" | "marked";
+  marks: number | null;
+  feedback: string | null;
+  rejection_reason: string | null;
+  submitted_at: string;
+  reviewed_at: string | null;
+};
+
+function AssignmentsAdmin() {
+  const qc = useQueryClient();
+  const { data: groups = [] } = useStudentGroups();
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [targetScope, setTargetScope] = useState<"all" | "group" | "user">("group");
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [selectedUser, setSelectedUser] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const { data: tasks = [], isLoading: tasksLoading, error: tasksError } = useQuery({
+    queryKey: ["admin", "assignment_tasks"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("assignment_tasks" as any).select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as AssignmentTaskAdmin[];
+    },
+  });
+
+  const { data: submissions = [], error: submissionsError } = useQuery({
+    queryKey: ["admin", "assignment_submissions"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("assignment_submissions" as any).select("*").order("submitted_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as AssignmentSubmissionAdmin[];
+    },
+  });
+
+  const { data: groupAccess = [], error: groupAccessError } = useQuery({
+    queryKey: ["admin", "assignment_task_groups"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("assignment_task_groups" as any).select("assignment_id,group_id");
+      if (error) throw error;
+      return (data ?? []) as { assignment_id: string; group_id: string }[];
+    },
+  });
+
+  const { data: userAccess = [], error: userAccessError } = useQuery({
+    queryKey: ["admin", "assignment_task_users"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("assignment_task_users" as any).select("assignment_id,user_id");
+      if (error) throw error;
+      return (data ?? []) as { assignment_id: string; user_id: string }[];
+    },
+  });
+
+  const { data: users = EMPTY_ADMIN_USERS, error: usersError } = useQuery({
+    queryKey: ["admin", "users"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.rpc as any)("admin_list_users");
+      if (error) throw error;
+      return (data ?? []) as AdminUser[];
+    },
+  });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin:assignments")
+      .on("postgres_changes", { event: "*", schema: "public", table: "assignment_tasks" }, () => invalidateAssignments(qc))
+      .on("postgres_changes", { event: "*", schema: "public", table: "assignment_submissions" }, () => invalidateAssignments(qc))
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
+  const userMap = useMemo(() => {
+    const map = new Map<string, AdminUser>();
+    users.forEach((user) => map.set(user.id, user));
+    return map;
+  }, [users]);
+
+  const groupsByTask = useMemo(() => {
+    const map = new Map<string, string[]>();
+    groupAccess.forEach((row) => map.set(row.assignment_id, [...(map.get(row.assignment_id) ?? []), row.group_id]));
+    return map;
+  }, [groupAccess]);
+
+  const usersByTask = useMemo(() => {
+    const map = new Map<string, string[]>();
+    userAccess.forEach((row) => map.set(row.assignment_id, [...(map.get(row.assignment_id) ?? []), row.user_id]));
+    return map;
+  }, [userAccess]);
+
+  const uploadAssignmentFile = async (assignmentId: string) => {
+    if (!file) return { file_url: null, file_name: null };
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const path = `tasks/${assignmentId}/${Date.now()}-${safeName}`;
+    const { error } = await supabase.storage.from("assignments").upload(path, file, {
+      upsert: true,
+      contentType: file.type || "application/octet-stream",
+    });
+    if (error) throw error;
+    const { data } = supabase.storage.from("assignments").getPublicUrl(path);
+    return { file_url: data.publicUrl, file_name: file.name };
+  };
+
+  const createAssignment = async () => {
+    if (!title.trim()) return toast.error("Assignment title is required.");
+    if (targetScope === "group" && selectedGroups.length === 0) return toast.error("Choose at least one group.");
+    if (targetScope === "user" && !selectedUser) return toast.error("Choose one student.");
+
+    setBusy(true);
+    const toastId = toast.loading("Creating assignment...");
+    const { data: sessionData } = await supabase.auth.getSession();
+    const { data: inserted, error } = await supabase
+      .from("assignment_tasks" as any)
+      .insert({
+        title: title.trim(),
+        description: description.trim(),
+        due_date: dueDate ? new Date(dueDate).toISOString() : null,
+        target_scope: targetScope,
+        created_by: sessionData.session?.user.id ?? null,
+      })
+      .select("id")
+      .single();
+    if (error) {
+      setBusy(false);
+      return toast.error("Assignment could not be created", { id: toastId, description: error.message });
+    }
+
+    try {
+      const uploaded = await uploadAssignmentFile((inserted as any).id);
+      if (uploaded.file_url) {
+        const { error: updateError } = await supabase.from("assignment_tasks" as any).update(uploaded).eq("id", (inserted as any).id);
+        if (updateError) throw updateError;
+      }
+      if (targetScope === "group") {
+        const { error: groupError } = await supabase.from("assignment_task_groups" as any).insert(
+          selectedGroups.map((groupId) => ({ assignment_id: (inserted as any).id, group_id: groupId })),
+        );
+        if (groupError) throw groupError;
+      }
+      if (targetScope === "user") {
+        const { error: userError } = await supabase.from("assignment_task_users" as any).insert({
+          assignment_id: (inserted as any).id,
+          user_id: selectedUser,
+        });
+        if (userError) throw userError;
+      }
+    } catch (e: any) {
+      setBusy(false);
+      return toast.error("Assignment setup failed", { id: toastId, description: e?.message ?? "Please try again." });
+    }
+
+    setBusy(false);
+    toast.success("Assignment created", { id: toastId });
+    setTitle("");
+    setDescription("");
+    setDueDate("");
+    setSelectedGroups([]);
+    setSelectedUser("");
+    setFile(null);
+    invalidateAssignments(qc);
+  };
+
+  const removeAssignment = async (assignment: AssignmentTaskAdmin) => {
+    const { error } = await supabase.from("assignment_tasks" as any).delete().eq("id", assignment.id);
+    if (error) return toast.error("Delete failed", { description: error.message });
+    toast.success("Assignment deleted");
+    invalidateAssignments(qc);
+  };
+
+  const students = users.filter((user) => user.role !== "admin");
+  const loadError = tasksError ?? submissionsError ?? groupAccessError ?? userAccessError ?? usersError;
+
+  return (
+    <div className="space-y-5">
+      {loadError && (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="pt-6">
+            <p className="font-semibold text-destructive">Assignments could not load</p>
+            <p className="mt-1 text-sm text-muted-foreground">{adminErrorMessage(loadError)}</p>
+          </CardContent>
+        </Card>
+      )}
+      <Card>
+        <CardContent className="pt-6 space-y-4">
+          <div>
+            <h3 className="font-serif text-xl font-semibold text-navy-deep">Give Assignment</h3>
+            <p className="text-sm text-muted-foreground">Upload an assignment for all students, selected groups, or one student.</p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <Label>Title</Label>
+              <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Differential Equations Assignment 1" />
+            </div>
+            <div>
+              <Label>Due date</Label>
+              <Input type="datetime-local" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Description / instructions</Label>
+              <Textarea rows={4} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Write instructions students should follow..." />
+            </div>
+            <div>
+              <Label>Assignment file</Label>
+              <label className="mt-1 flex min-h-20 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gold/50 bg-gold/5 px-4 py-3 text-center transition-colors hover:border-gold hover:bg-gold/10">
+                <FileUp size={20} className="mb-1 text-gold" />
+                <span className="text-sm font-semibold text-navy-deep">{file ? file.name : "Upload assignment file"}</span>
+                <span className="mt-0.5 text-xs text-muted-foreground">Attach instructions, PDF, document, or supporting file</span>
+                <input type="file" className="sr-only" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+              </label>
+            </div>
+            <div>
+              <Label>Audience</Label>
+              <select value={targetScope} onChange={(event) => setTargetScope(event.target.value as any)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                <option value="group">Specific group(s)</option>
+                <option value="user">Single student</option>
+                <option value="all">All students</option>
+              </select>
+            </div>
+          </div>
+
+          {targetScope === "group" && (
+            <div className="grid gap-2 rounded-lg border border-border bg-secondary/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
+              {groups.map((group) => (
+                <label key={group.id} className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selectedGroups.includes(group.id)}
+                    onChange={() => setSelectedGroups((ids) => ids.includes(group.id) ? ids.filter((id) => id !== group.id) : [...ids, group.id])}
+                  />
+                  {group.group_name}
+                </label>
+              ))}
+            </div>
+          )}
+
+          {targetScope === "user" && (
+            <div>
+              <Label>Student</Label>
+              <select value={selectedUser} onChange={(event) => setSelectedUser(event.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                <option value="">Choose student</option>
+                {students.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {[user.first_name, user.last_name].filter(Boolean).join(" ") || user.email} {user.admission_number ? `(${user.admission_number})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <Button className="bg-gold text-navy-deep hover:bg-gold-soft" disabled={busy} onClick={createAssignment}>
+            <FileUp size={16} className="mr-2" />{busy ? "Creating..." : "Publish Assignment"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+        <Card>
+          <CardContent className="pt-6">
+            <h3 className="font-serif text-xl font-semibold text-navy-deep">Assignments Given</h3>
+            <div className="mt-4 space-y-3">
+              {tasksLoading ? <p className="text-sm text-muted-foreground">Loading assignments...</p> : null}
+              {tasks.map((task) => (
+                <div key={task.id} className="rounded-lg border border-border bg-background p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-navy-deep">{task.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {task.due_date ? `Due ${formatDate(task.due_date)}` : "No due date"} · {task.target_scope}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {assignmentAudienceText(task, groupsByTask, usersByTask, groups, userMap)}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      {task.file_url && (
+                        <Button asChild size="sm" variant="outline">
+                          <a href={task.file_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /></a>
+                        </Button>
+                      )}
+                      <ConfirmAction
+                        title="Delete assignment?"
+                        description={`This will remove "${task.title}" and its submissions.`}
+                        confirmLabel="Delete assignment"
+                        destructive
+                        onConfirm={() => removeAssignment(task)}
+                      >
+                        <Button size="sm" variant="destructive"><Trash2 size={14} /></Button>
+                      </ConfirmAction>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {!tasksLoading && tasks.length === 0 && <p className="text-sm text-muted-foreground">No assignments created yet.</p>}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <h3 className="font-serif text-xl font-semibold text-navy-deep">Submitted Assignments</h3>
+            <div className="mt-4 space-y-3">
+              {submissions.map((submission) => (
+                <AssignmentSubmissionReview
+                  key={submission.id}
+                  submission={submission}
+                  task={tasks.find((task) => task.id === submission.assignment_id)}
+                  student={userMap.get(submission.student_id)}
+                  onChange={() => invalidateAssignments(qc)}
+                />
+              ))}
+              {submissions.length === 0 && <p className="text-sm text-muted-foreground">No submissions yet.</p>}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function AssignmentSubmissionReview({
+  submission,
+  task,
+  student,
+  onChange,
+}: {
+  submission: AssignmentSubmissionAdmin;
+  task?: AssignmentTaskAdmin;
+  student?: AdminUser;
+  onChange: () => void;
+}) {
+  const [status, setStatus] = useState<AssignmentSubmissionAdmin["status"]>(submission.status);
+  const [marks, setMarks] = useState(submission.marks?.toString() ?? "");
+  const [feedback, setFeedback] = useState(submission.feedback ?? "");
+  const [reason, setReason] = useState(submission.rejection_reason ?? "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setStatus(submission.status);
+    setMarks(submission.marks?.toString() ?? "");
+    setFeedback(submission.feedback ?? "");
+    setReason(submission.rejection_reason ?? "");
+  }, [submission]);
+
+  const save = async () => {
+    setSaving(true);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const payload = {
+      status,
+      marks: marks.trim() ? Number(marks) : null,
+      feedback: feedback.trim() || null,
+      rejection_reason: status === "rejected" ? reason.trim() || "Please revise and submit afresh." : null,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: sessionData.session?.user.id ?? null,
+    };
+    const { error } = await supabase.from("assignment_submissions" as any).update(payload).eq("id", submission.id);
+    setSaving(false);
+    if (error) return toast.error("Review could not be saved", { description: error.message });
+    toast.success("Assignment review saved");
+    onChange();
+  };
+
+  const studentName = [student?.first_name, student?.last_name].filter(Boolean).join(" ") || student?.email || "Unknown student";
+
+  return (
+    <div className="rounded-lg border border-border bg-background p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="font-semibold text-navy-deep">{studentName}</p>
+          <p className="text-xs text-muted-foreground">{student?.admission_number ? `Adm No: ${student.admission_number} · ` : ""}{task?.title ?? "Assignment"} · {formatDate(submission.submitted_at)}</p>
+          {submission.note && <p className="mt-2 text-sm text-muted-foreground">{submission.note}</p>}
+        </div>
+        {submission.file_url && (
+          <Button asChild size="sm" variant="outline">
+            <a href={submission.file_url} target="_blank" rel="noreferrer">
+              <Download size={14} className="mr-1" />Open
+            </a>
+          </Button>
+        )}
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div>
+          <Label className="text-xs">Status</Label>
+          <select value={status} onChange={(event) => setStatus(event.target.value as any)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+            <option value="submitted">Submitted</option>
+            <option value="received">Received</option>
+            <option value="rejected">Rejected</option>
+            <option value="marked">Marked</option>
+          </select>
+        </div>
+        <div>
+          <Label className="text-xs">Marks</Label>
+          <Input type="number" value={marks} onChange={(event) => setMarks(event.target.value)} placeholder="e.g. 78" />
+        </div>
+        <div className="md:col-span-2">
+          <Label className="text-xs">Feedback</Label>
+          <Textarea rows={3} value={feedback} onChange={(event) => setFeedback(event.target.value)} />
+        </div>
+        {status === "rejected" && (
+          <div className="md:col-span-2">
+            <Label className="text-xs">Reason for rejection</Label>
+            <Textarea rows={3} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Explain what the student should fix before resubmitting." />
+          </div>
+        )}
+      </div>
+      <Button size="sm" className="mt-3 bg-navy-deep text-cream hover:bg-navy" disabled={saving} onClick={save}>
+        <Save size={14} className="mr-1" />{saving ? "Saving..." : "Save Review"}
+      </Button>
+    </div>
+  );
+}
+
+function invalidateAssignments(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ["admin", "assignment_tasks"] });
+  qc.invalidateQueries({ queryKey: ["admin", "assignment_submissions"] });
+  qc.invalidateQueries({ queryKey: ["admin", "assignment_task_groups"] });
+  qc.invalidateQueries({ queryKey: ["admin", "assignment_task_users"] });
+  qc.invalidateQueries({ queryKey: ["student"] });
+}
+
+function assignmentAudienceText(
+  task: AssignmentTaskAdmin,
+  groupsByTask: Map<string, string[]>,
+  usersByTask: Map<string, string[]>,
+  groups: StudentGroup[],
+  users: Map<string, AdminUser>,
+) {
+  if (task.target_scope === "all") return "Visible to all students";
+  if (task.target_scope === "group") {
+    const names = (groupsByTask.get(task.id) ?? []).map((id) => groups.find((group) => group.id === id)?.group_name).filter(Boolean);
+    return names.length ? `Groups: ${names.join(", ")}` : "No group selected";
+  }
+  const names = (usersByTask.get(task.id) ?? []).map((id) => {
+    const user = users.get(id);
+    return [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.email;
+  }).filter(Boolean);
+  return names.length ? `Student: ${names.join(", ")}` : "No student selected";
+}
+
+function adminErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) return String((error as any).message);
+  return "Please refresh this section.";
 }
 
 function UsersAdmin({ currentUserId }: { currentUserId: string }) {
@@ -1836,7 +2330,7 @@ function UsersAdmin({ currentUserId }: { currentUserId: string }) {
 
   const filteredUsers = data.filter((user) => {
     const q = search.trim().toLowerCase();
-    if (q && ![user.email, user.first_name, user.last_name, user.group_name, user.organization_name, user.program].some((value) => String(value ?? "").toLowerCase().includes(q))) return false;
+    if (q && ![user.email, user.first_name, user.last_name, user.group_name, user.organization_name, user.program, user.admission_number].some((value) => String(value ?? "").toLowerCase().includes(q))) return false;
     if (groupFilter !== "all" && (user.group_id ?? "unassigned") !== groupFilter) return false;
     if (statusFilter !== "all" && user.status !== statusFilter) return false;
     if (roleFilter !== "all" && user.role !== roleFilter) return false;
@@ -2009,7 +2503,7 @@ function UsersAdmin({ currentUserId }: { currentUserId: string }) {
           </div>
 
           <div className="mb-4 grid md:grid-cols-5 gap-3">
-            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, email, group, program..." className="md:col-span-2" />
+            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, email, group, program, adm no..." className="md:col-span-2" />
             <select value={groupFilter} onChange={(event) => setGroupFilter(event.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
               <option value="all">{groupsLoading ? "Loading groups..." : "All groups"}</option>
               <option value="unassigned">Unassigned</option>
@@ -2096,6 +2590,7 @@ function UsersAdmin({ currentUserId }: { currentUserId: string }) {
                     <th className="px-3 py-3 text-left">User</th>
                     <th className="px-3 py-3 text-left">Role</th>
                     <th className="px-3 py-3 text-left">Status</th>
+                    <th className="px-3 py-3 text-left">Adm No.</th>
                     <th className="px-3 py-3 text-left">Group</th>
                     <th className="px-3 py-3 text-left">Joined</th>
                     <th className="px-3 py-3 text-right">Actions</th>
@@ -2185,6 +2680,9 @@ function UserTableRows({
             {user.status}
           </span>
         </td>
+        <td className="px-3 py-3 align-middle text-xs text-muted-foreground">
+          {user.role === "admin" ? "—" : user.admission_number || "Not set"}
+        </td>
         <td className="px-3 py-3 align-middle">
           <select
             value={user.group_id ?? "unassigned"}
@@ -2213,13 +2711,14 @@ function UserTableRows({
       </tr>
       {expanded && (
         <tr className="bg-secondary/20">
-          <td colSpan={7} className="px-4 py-4">
+          <td colSpan={8} className="px-4 py-4">
             <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr_1.2fr]">
               <div className="rounded-lg border border-border bg-background p-4">
                 <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Profile</p>
                 <div className="grid gap-2 text-sm">
                   <UserDetail label="Email" value={user.email} />
                   <UserDetail label="Organization" value={user.organization_name} />
+                  {user.role !== "admin" && <UserDetail label="Adm No:" value={user.admission_number} />}
                   <UserDetail label="Education" value={user.education_level ? formatEducationLevel(user.education_level) : ""} />
                   <UserDetail label="Program" value={user.program} />
                   <UserDetail label="Confirmed" value={user.confirmed ? "Confirmed" : "Unconfirmed"} />

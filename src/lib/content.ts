@@ -44,6 +44,16 @@ export type StudentGroup = {
   created_at: string;
 };
 
+export type Announcement = {
+  id: string;
+  date: string;
+  title: string;
+  body: string;
+  sort_order: number | null;
+  target_scope?: "general" | "group" | string | null;
+  created_at?: string;
+};
+
 export type ResourceDirectoryItem = {
   id: string;
   title: string;
@@ -124,7 +134,7 @@ export function useSiteContent<T>(key: string, fallback: T) {
   return { ...q, data: (q.data ?? fallback) as T };
 }
 
-export function useAnnouncements() {
+export function useAnnouncements(scope = "public") {
   const qc = useQueryClient();
   useEffect(() => {
     const channel = supabase
@@ -142,15 +152,18 @@ export function useAnnouncements() {
   }, [qc]);
 
   return useQuery({
-    queryKey: ["announcements"],
+    queryKey: ["announcements", scope],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("announcements")
         .select("*")
-        .order("sort_order", { ascending: true });
-      return data ?? [];
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Announcement[];
     },
     initialData: [],
+    staleTime: 10_000,
   });
 }
 
