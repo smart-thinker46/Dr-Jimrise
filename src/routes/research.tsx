@@ -65,14 +65,16 @@ function ResearchPage() {
             className="w-full"
           >
             <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <TabsList className="bg-secondary border border-border">
-                <TabsTrigger value="journals" className="data-[state=active]:bg-navy-deep data-[state=active]:text-cream text-navy-deep">
-                  Journal Articles ({filteredJournals.length})
+              <TabsList className="!grid !h-auto w-full grid-cols-1 gap-1 bg-secondary border border-border p-1 sm:grid-cols-3 lg:w-auto lg:min-w-[640px]">
+                <TabsTrigger value="journals" className="min-h-10 whitespace-normal px-3 text-center text-xs leading-tight data-[state=active]:bg-navy-deep data-[state=active]:text-cream text-navy-deep sm:text-sm">
+                  <span className="sm:hidden">Journals ({filteredJournals.length})</span>
+                  <span className="hidden sm:inline">Journal Articles ({filteredJournals.length})</span>
                 </TabsTrigger>
-                <TabsTrigger value="conferences" className="data-[state=active]:bg-navy-deep data-[state=active]:text-cream text-navy-deep">
-                  Conference Presentations ({filteredConferences.length})
+                <TabsTrigger value="conferences" className="min-h-10 whitespace-normal px-3 text-center text-xs leading-tight data-[state=active]:bg-navy-deep data-[state=active]:text-cream text-navy-deep sm:text-sm">
+                  <span className="sm:hidden">Conferences ({filteredConferences.length})</span>
+                  <span className="hidden sm:inline">Conference Presentations ({filteredConferences.length})</span>
                 </TabsTrigger>
-                <TabsTrigger value="supervision" className="data-[state=active]:bg-navy-deep data-[state=active]:text-cream text-navy-deep">
+                <TabsTrigger value="supervision" className="min-h-10 whitespace-normal px-3 text-center text-xs leading-tight data-[state=active]:bg-navy-deep data-[state=active]:text-cream text-navy-deep sm:text-sm">
                   Supervision ({supervisionCount})
                 </TabsTrigger>
               </TabsList>
