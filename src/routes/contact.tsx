@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Mail, MapPin, Linkedin, GraduationCap, BookOpen, ArrowRight, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Layout, PageHeader } from "@/components/Layout";
 import { toast } from "sonner";
-import { useSiteContent, contactFallback, normalizeContactContent } from "@/lib/content";
+import { contactFallback, normalizeContactContent, type ContactContent } from "@/lib/content";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/contact")({
@@ -21,12 +21,37 @@ export const Route = createFileRoute("/contact")({
 });
 
 function ContactPage() {
-  const { data } = useSiteContent<unknown>("contact", contactFallback);
-  const c = normalizeContactContent(data);
+  const [contactContent, setContactContent] = useState<ContactContent>(contactFallback);
+  const c = normalizeContactContent(contactContent);
   const email = c.email;
   const institutionLine1 = c.institution_line1;
   const institutionLine2 = c.institution_line2;
   const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadContactContent() {
+      try {
+        const { data: rpcData, error: rpcError } = await (supabase.rpc as any)("get_site_content_value", { content_key: "contact" });
+        if (!rpcError && rpcData && mounted) {
+          setContactContent(normalizeContactContent(rpcData));
+          return;
+        }
+
+        const { data } = await supabase.from("site_content").select("value").eq("key", "contact").maybeSingle();
+        if (mounted) setContactContent(normalizeContactContent(data?.value));
+      } catch (error) {
+        console.warn("Contact content could not load", error);
+        if (mounted) setContactContent(contactFallback);
+      }
+    }
+
+    void loadContactContent();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <Layout plain>

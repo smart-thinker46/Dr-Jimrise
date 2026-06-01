@@ -56,6 +56,20 @@ function BlogPostPage() {
               {formatDate(post.published_at ?? post.created_at)}
             </span>
           </div>
+          {post.cover_image_url && (
+            <div className="mb-8 overflow-hidden rounded-lg border bg-secondary aspect-[16/9]">
+              <img
+                src={optimizedImageUrl(post.cover_image_url, 1200)}
+                alt=""
+                className="h-full w-full object-cover"
+                loading="eager"
+                decoding="async"
+              />
+            </div>
+          )}
+          <p className="mb-8 text-sm font-semibold uppercase tracking-wide text-gold">
+            {post.author_name ?? "Dr. Jimrise Ochwach, PhD"}
+          </p>
           <div
             className="blog-content text-foreground leading-relaxed"
             dangerouslySetInnerHTML={{ __html: enhanceBlogImages(post.content) }}

@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Layout, PageHeader } from "@/components/Layout";
 import { useBlogs } from "@/lib/content";
+import { optimizedImageUrl } from "@/lib/images";
 
 export const Route = createFileRoute("/blogs")({
   head: () => ({
@@ -37,7 +38,18 @@ function BlogsPage() {
             <div className="grid md:grid-cols-2 gap-5">
               {posts.map((post) => (
                 <Link key={post.id} to="/blogs/$slug" params={{ slug: post.slug }} className="group">
-                  <Card className="h-full hover:border-gold hover:shadow-xl hover:-translate-y-1 transition-all">
+                  <Card className="h-full overflow-hidden hover:border-gold hover:shadow-xl hover:-translate-y-1 transition-all">
+                    {post.cover_image_url && (
+                      <div className="aspect-[16/9] overflow-hidden bg-secondary">
+                        <img
+                          src={optimizedImageUrl(post.cover_image_url, 800)}
+                          alt=""
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      </div>
+                    )}
                     <CardContent className="pt-6 flex flex-col h-full">
                       <div className="flex items-center justify-between gap-3 mb-4">
                         <Badge className="bg-gold/15 text-navy-deep hover:bg-gold/15">Published</Badge>
@@ -49,6 +61,9 @@ function BlogsPage() {
                       <h2 className="font-serif text-2xl font-bold text-navy-deep leading-tight group-hover:text-gold transition-colors">
                         {post.title}
                       </h2>
+                      <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-gold">
+                        {post.author_name ?? "Dr. Jimrise Ochwach, PhD"}
+                      </p>
                       {post.excerpt && (
                         <p className="mt-3 text-sm text-foreground/70 leading-relaxed flex-1">{post.excerpt}</p>
                       )}

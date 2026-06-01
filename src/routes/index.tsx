@@ -243,11 +243,25 @@ function Home() {
                   <PenLine size={18} className="text-gold" />
                   <h3 className="font-serif text-lg font-semibold text-navy-deep">Latest Insights</h3>
                 </div>
-                <div className="space-y-3">
+                <div className="grid gap-3">
                   {latestBlogs.length > 0 ? latestBlogs.map((post) => (
-                    <Link key={post.id} to="/blogs/$slug" params={{ slug: post.slug }} className="block border-b border-border pb-3 last:border-0 group">
-                      <p className="text-sm font-semibold text-navy-deep group-hover:text-gold transition-colors">{post.title}</p>
-                      {post.excerpt && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{post.excerpt}</p>}
+                    <Link key={post.id} to="/blogs/$slug" params={{ slug: post.slug }} className="group overflow-hidden rounded-lg border bg-background hover:border-gold hover:shadow-md transition-all">
+                      {post.cover_image_url && (
+                        <div className="aspect-[16/9] overflow-hidden bg-secondary">
+                          <img
+                            src={optimizedImageUrl(post.cover_image_url, 600)}
+                            alt=""
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        </div>
+                      )}
+                      <div className="p-3">
+                        <p className="text-sm font-semibold text-navy-deep group-hover:text-gold transition-colors">{post.title}</p>
+                        <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-gold">{post.author_name ?? "Dr. Jimrise Ochwach, PhD"}</p>
+                        {post.excerpt && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{post.excerpt}</p>}
+                      </div>
                     </Link>
                   )) : <p className="text-sm text-muted-foreground">No published insights yet.</p>}
                 </div>

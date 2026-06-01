@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { Component, useEffect, useRef, useState, type ReactNode } from "react";
+import { Component, useEffect, useRef, useState, type DragEvent, type PointerEvent, type ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,6 +21,7 @@ import {
   Bold, Italic, Underline, Link as LinkIcon, Image, MousePointerClick, Palette, List, ListOrdered, Quote,
   Database, LayoutDashboard, BarChart3, Bell, FileText, FileUp, GraduationCap, Activity, AlignLeft, AlignCenter, AlignRight,
   AlignJustify, Undo2, Redo2, Eraser, Minus, Table2, Heading1, Heading2, Pilcrow, Highlighter, MessageSquare, PhoneCall, ChevronDown,
+  Maximize2, Captions, PanelLeft, PanelRight, Link2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -2395,6 +2396,7 @@ function BlogsAdmin() {
       slug,
       excerpt: "",
       content: "",
+      author_name: "Dr. Jimrise Ochwach, PhD",
       status: "draft",
       sort_order: 0,
     });
@@ -2436,18 +2438,34 @@ type BlogPost = {
   slug: string;
   excerpt: string | null;
   content: string;
+  cover_image_url?: string | null;
+  author_id?: string | null;
+  author_name?: string | null;
   status: "draft" | "published";
   sort_order: number;
 };
 
 function BlogPostEditor({ post, onSaved }: { post: BlogPost; onSaved: () => void }) {
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const { user } = useAuth();
   const [form, setForm] = useState<BlogPost>(post);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<HTMLImageElement | null>(null);
+  const savedSelectionRef = useRef<Range | null>(null);
+  const [activePanel, setActivePanel] = useState<null | "link" | "embed" | "button" | "table" | "image">(null);
+  const [linkDraft, setLinkDraft] = useState({ url: "", text: "" });
+  const [embedDraft, setEmbedDraft] = useState({ url: "", title: "", description: "" });
+  const [buttonDraft, setButtonDraft] = useState({ label: "Read more", url: "" });
+  const [tableDraft, setTableDraft] = useState({ rows: 3, cols: 3 });
+  const [imageDraft, setImageDraft] = useState({ caption: "", link: "", width: "60", crop: "none", focusX: "50", focusY: "50" });
+  const dragImageRef = useRef<HTMLElement | null>(null);
+  const cropDragRef = useRef<{ image: HTMLImageElement; rect: DOMRect } | null>(null);
 
   useEffect(() => {
     setForm(post);
+    setSelectedImage(null);
     if (editorRef.current) editorRef.current.innerHTML = post.content ?? "";
   }, [post]);
 
@@ -2455,17 +2473,75 @@ function BlogPostEditor({ post, onSaved }: { post: BlogPost; onSaved: () => void
     setForm((f) => ({ ...f, content: editorRef.current?.innerHTML ?? "" }));
   };
 
+  const saveSelection = () => {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount) return;
+    const range = selection.getRangeAt(0);
+    if (editorRef.current?.contains(range.commonAncestorContainer)) {
+      savedSelectionRef.current = range.cloneRange();
+    }
+  };
+
+  const restoreSelection = () => {
+    const selection = window.getSelection();
+    if (!selection || !savedSelectionRef.current) return;
+    selection.removeAllRanges();
+    selection.addRange(savedSelectionRef.current);
+  };
+
+  const openPanel = (panel: NonNullable<typeof activePanel>) => {
+    saveSelection();
+    if (panel === "image" && selectedImage) {
+      const figure = selectedFigure();
+      setImageDraft({
+        caption: figure?.querySelector("figcaption")?.textContent ?? "",
+        link: selectedImage.closest("a")?.getAttribute("href") ?? "",
+        width: (figure?.style.width || "60%").replace("%", ""),
+        crop: figure?.dataset.crop || "none",
+        focusX: selectedImage.style.objectPosition.split(" ")[0]?.replace("%", "") || "50",
+        focusY: selectedImage.style.objectPosition.split(" ")[1]?.replace("%", "") || "50",
+      });
+    }
+    setActivePanel((current) => (current === panel ? null : panel));
+  };
+
+  const selectImageFromTarget = (target: EventTarget | null) => {
+    if (target instanceof HTMLImageElement) {
+      setSelectedImage(target);
+      const figure = target.closest("figure");
+      setImageDraft({
+        caption: figure?.querySelector("figcaption")?.textContent ?? "",
+        link: target.closest("a")?.getAttribute("href") ?? "",
+        width: ((figure as HTMLElement | null)?.style.width || "60%").replace("%", ""),
+        crop: (figure as HTMLElement | null)?.dataset.crop || "none",
+        focusX: target.style.objectPosition.split(" ")[0]?.replace("%", "") || "50",
+        focusY: target.style.objectPosition.split(" ")[1]?.replace("%", "") || "50",
+      });
+      return;
+    }
+    const element = target instanceof HTMLElement ? target : null;
+    const image = element?.closest("figure")?.querySelector("img") ?? null;
+    setSelectedImage(image);
+  };
+
   const exec = (command: string, value?: string) => {
+    restoreSelection();
     editorRef.current?.focus();
     document.execCommand(command, false, value);
     syncContent();
+    saveSelection();
   };
 
   const insertHtml = (html: string) => {
+    restoreSelection();
     editorRef.current?.focus();
     document.execCommand("insertHTML", false, html);
     syncContent();
+    saveSelection();
   };
+
+  const escapeHtml = (value: string) =>
+    value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
 
   const normalizeUrl = (url: string) => {
     if (!url || url === "#") return "#";
@@ -2474,15 +2550,44 @@ function BlogPostEditor({ post, onSaved }: { post: BlogPost; onSaved: () => void
   };
 
   const addLink = () => {
-    const url = prompt("Enter link URL");
-    if (!url) return;
-    exec("createLink", normalizeUrl(url));
+    const url = normalizeUrl(linkDraft.url);
+    if (!linkDraft.url) return toast.error("Enter a link URL.");
+    if (linkDraft.text.trim()) {
+      insertHtml(`<a href="${url}" target="_blank" rel="noopener noreferrer">${escapeHtml(linkDraft.text.trim())}</a>`);
+    } else {
+      exec("createLink", url);
+    }
+    setLinkDraft({ url: "", text: "" });
+    setActivePanel(null);
+  };
+
+  const addEmbeddedLink = () => {
+    const url = normalizeUrl(embedDraft.url);
+    if (!embedDraft.url) return toast.error("Enter a link URL.");
+    const title = embedDraft.title || "Open linked resource";
+    const description = embedDraft.description || "Click to open this resource in a new tab.";
+    let host = "";
+    try {
+      host = new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      host = url;
+    }
+    insertHtml(`
+      <a href="${url}" target="_blank" rel="noopener noreferrer" class="blog-link-embed" style="display:block;border:1px solid #d8dee8;border-radius:8px;padding:16px 18px;margin:18px 0;text-decoration:none;background:#ffffff;color:#1a2e4a;">
+        <span style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#c9a84c;font-weight:800;margin-bottom:6px;">${escapeHtml(host)}</span>
+        <strong style="display:block;font-size:18px;color:#1a2e4a;margin-bottom:6px;">${escapeHtml(title)}</strong>
+        <span style="display:block;color:#64748b;font-weight:500;line-height:1.55;">${escapeHtml(description)}</span>
+      </a>
+    `);
+    setEmbedDraft({ url: "", title: "", description: "" });
+    setActivePanel(null);
   };
 
   const addButton = () => {
-    const label = prompt("Button text") || "Read more";
-    const url = normalizeUrl(prompt("Button URL") || "#");
-    insertHtml(`<a href="${url}" class="blog-button" style="display:inline-block;background:#1a2e4a;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:700;margin:10px 0;">${label}</a>`);
+    const url = normalizeUrl(buttonDraft.url || "#");
+    insertHtml(`<a href="${url}" class="blog-button" style="display:inline-block;background:#1a2e4a;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:700;margin:10px 0;">${escapeHtml(buttonDraft.label || "Read more")}</a>`);
+    setButtonDraft({ label: "Read more", url: "" });
+    setActivePanel(null);
   };
 
   const addCallout = () => {
@@ -2490,11 +2595,12 @@ function BlogPostEditor({ post, onSaved }: { post: BlogPost; onSaved: () => void
   };
 
   const addTable = () => {
-    const rows = Math.max(1, Number(prompt("Number of rows", "3")) || 3);
-    const cols = Math.max(1, Number(prompt("Number of columns", "3")) || 3);
+    const rows = Math.max(1, tableDraft.rows || 3);
+    const cols = Math.max(1, tableDraft.cols || 3);
     const header = `<tr>${Array.from({ length: cols }, (_, i) => `<th>Heading ${i + 1}</th>`).join("")}</tr>`;
     const body = Array.from({ length: rows - 1 }, () => `<tr>${Array.from({ length: cols }, () => "<td>Text</td>").join("")}</tr>`).join("");
     insertHtml(`<table class="blog-table" style="width:100%;border-collapse:collapse;margin:16px 0;">${header}${body}</table>`);
+    setActivePanel(null);
   };
 
   const uploadImage = async (file: File) => {
@@ -2507,19 +2613,219 @@ function BlogPostEditor({ post, onSaved }: { post: BlogPost; onSaved: () => void
       return toast.error(error.message);
     }
     const { data } = supabase.storage.from("public-assets").getPublicUrl(path);
-    const alt = prompt("Image description / alt text", "") ?? "";
-    insertHtml(`<figure style="margin:16px 0;"><img src="${optimizedImageUrl(data.publicUrl, 1200)}" alt="${alt.replace(/"/g, "&quot;")}" loading="lazy" decoding="async" style="max-width:100%;border-radius:8px;display:block;" /><figcaption style="font-size:13px;color:#64748b;margin-top:6px;text-align:center;">${alt}</figcaption></figure>`);
+    const alt = imageDraft.caption ?? "";
+    insertHtml(`<figure class="blog-image-block" draggable="true" data-crop="none" style="margin:16px auto;width:100%;max-width:100%;"><img src="${optimizedImageUrl(data.publicUrl, 1200)}" alt="${alt.replace(/"/g, "&quot;")}" loading="lazy" decoding="async" style="width:100%;max-width:100%;height:auto;border-radius:8px;display:block;margin:0 auto;object-position:50% 50%;" /><figcaption style="font-size:13px;color:#64748b;margin-top:6px;text-align:center;">${alt}</figcaption></figure>`);
     setUploading(false);
     toast.success("Image inserted");
   };
 
+  const uploadCoverImage = async (file: File) => {
+    setCoverUploading(true);
+    const optimizedFile = await compressImageFile(file, 1800, 0.78);
+    const path = `blogs/${form.id}/cover-${Date.now()}-${optimizedFile.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const { error } = await supabase.storage.from("public-assets").upload(path, optimizedFile, { upsert: true, contentType: optimizedFile.type });
+    if (error) {
+      setCoverUploading(false);
+      return toast.error(error.message);
+    }
+    const { data } = supabase.storage.from("public-assets").getPublicUrl(path);
+    setForm((current) => ({ ...current, cover_image_url: optimizedImageUrl(data.publicUrl, 1200) }));
+    setCoverUploading(false);
+    toast.success("Insight hero image uploaded");
+  };
+
+  const selectedFigure = () => selectedImage?.closest("figure") as HTMLElement | null;
+
+  const updateImageLayout = (position: "left" | "center" | "right" | "full") => {
+    const figure = selectedFigure();
+    if (!figure || !selectedImage) return toast.error("Select an image inside the editor first.");
+
+    figure.classList.add("blog-image-block");
+    figure.style.maxWidth = "100%";
+    selectedImage.style.width = "100%";
+    selectedImage.style.maxWidth = "100%";
+    selectedImage.style.height = "auto";
+    selectedImage.style.display = "block";
+
+    if (position === "left") {
+      figure.style.float = "left";
+      figure.style.margin = "8px 24px 16px 0";
+      if (!figure.style.width || figure.style.width === "100%") figure.style.width = "45%";
+      selectedImage.style.margin = "0";
+    } else if (position === "right") {
+      figure.style.float = "right";
+      figure.style.margin = "8px 0 16px 24px";
+      if (!figure.style.width || figure.style.width === "100%") figure.style.width = "45%";
+      selectedImage.style.margin = "0";
+    } else if (position === "full") {
+      figure.style.float = "none";
+      figure.style.width = "100%";
+      figure.style.margin = "18px 0";
+      selectedImage.style.margin = "0 auto";
+    } else {
+      figure.style.float = "none";
+      figure.style.margin = "18px auto";
+      selectedImage.style.margin = "0 auto";
+    }
+    syncContent();
+  };
+
+  const resizeSelectedImage = (width: string) => {
+    const figure = selectedFigure();
+    if (!figure || !selectedImage) return toast.error("Select an image inside the editor first.");
+    figure.classList.add("blog-image-block");
+    figure.style.width = width;
+    figure.style.maxWidth = "100%";
+    selectedImage.style.width = "100%";
+    selectedImage.style.maxWidth = "100%";
+    selectedImage.style.height = "auto";
+    syncContent();
+  };
+
+  const applyImageCrop = (crop: string, focusX = imageDraft.focusX, focusY = imageDraft.focusY) => {
+    const figure = selectedFigure();
+    if (!figure || !selectedImage) return toast.error("Select an image inside the editor first.");
+    figure.classList.add("blog-image-block");
+    figure.dataset.crop = crop;
+    selectedImage.style.width = "100%";
+    selectedImage.style.maxWidth = "100%";
+    selectedImage.style.display = "block";
+    selectedImage.style.objectPosition = `${focusX}% ${focusY}%`;
+    if (crop === "none") {
+      selectedImage.style.height = "auto";
+      selectedImage.style.aspectRatio = "";
+      selectedImage.style.objectFit = "";
+    } else {
+      selectedImage.style.height = "auto";
+      selectedImage.style.aspectRatio = crop;
+      selectedImage.style.objectFit = "cover";
+    }
+    setImageDraft((draft) => ({ ...draft, crop, focusX, focusY }));
+    syncContent();
+  };
+
+  const startCropDrag = (event: PointerEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof HTMLImageElement)) return;
+    if (!event.target.closest(".blog-image-block")) return;
+    setSelectedImage(event.target);
+    if ((event.target.closest("figure") as HTMLElement | null)?.dataset.crop === "none") return;
+    cropDragRef.current = { image: event.target, rect: event.target.getBoundingClientRect() };
+    event.target.setPointerCapture(event.pointerId);
+  };
+
+  const moveCropFocus = (event: PointerEvent<HTMLDivElement>) => {
+    if (!cropDragRef.current) return;
+    const { image, rect } = cropDragRef.current;
+    const x = Math.round(Math.min(100, Math.max(0, ((event.clientX - rect.left) / rect.width) * 100)));
+    const y = Math.round(Math.min(100, Math.max(0, ((event.clientY - rect.top) / rect.height) * 100)));
+    image.style.objectPosition = `${x}% ${y}%`;
+    setImageDraft((draft) => ({ ...draft, focusX: String(x), focusY: String(y) }));
+  };
+
+  const stopCropDrag = () => {
+    if (cropDragRef.current) syncContent();
+    cropDragRef.current = null;
+  };
+
+  const handleImageDragStart = (event: DragEvent<HTMLDivElement>) => {
+    const figure = (event.target as HTMLElement | null)?.closest?.("figure.blog-image-block") as HTMLElement | null;
+    if (!figure) return;
+    dragImageRef.current = figure;
+    figure.classList.add("is-dragging");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", "blog-image-block");
+  };
+
+  const handleImageDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!dragImageRef.current) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  };
+
+  const handleImageDrop = (event: DragEvent<HTMLDivElement>) => {
+    const figure = dragImageRef.current;
+    if (!figure || !editorRef.current) return;
+    event.preventDefault();
+    const range = (document as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null }).caretRangeFromPoint?.(event.clientX, event.clientY);
+    if (range && editorRef.current.contains(range.commonAncestorContainer)) {
+      range.insertNode(figure);
+      figure.classList.remove("is-dragging");
+      setSelectedImage(figure.querySelector("img"));
+      syncContent();
+    }
+    dragImageRef.current = null;
+  };
+
+  const handleImageDragEnd = () => {
+    dragImageRef.current?.classList.remove("is-dragging");
+    dragImageRef.current = null;
+  };
+
+  const setCustomImageWidth = (value = imageDraft.width) => {
+    const width = value;
+    if (!width) return;
+    const numeric = Math.min(100, Math.max(15, Number(width)));
+    if (!Number.isFinite(numeric)) return toast.error("Enter a valid width number.");
+    resizeSelectedImage(`${numeric}%`);
+    setImageDraft((draft) => ({ ...draft, width: String(numeric) }));
+  };
+
+  const editImageCaption = (value = imageDraft.caption) => {
+    const figure = selectedFigure();
+    if (!figure) return toast.error("Select an image inside the editor first.");
+    let caption = figure.querySelector("figcaption") as HTMLElement | null;
+    const text = value ?? "";
+    if (!caption) {
+      caption = document.createElement("figcaption");
+      caption.style.fontSize = "13px";
+      caption.style.color = "#64748b";
+      caption.style.marginTop = "6px";
+      caption.style.textAlign = "center";
+      figure.appendChild(caption);
+    }
+    caption.textContent = text;
+    syncContent();
+  };
+
+  const linkSelectedImage = (value = imageDraft.link) => {
+    if (!selectedImage) return toast.error("Select an image inside the editor first.");
+    const url = normalizeUrl(value || "");
+    if (!url || url === "#") return;
+    const existingLink = selectedImage.closest("a");
+    if (existingLink && editorRef.current?.contains(existingLink)) {
+      existingLink.setAttribute("href", url);
+      existingLink.setAttribute("target", "_blank");
+      existingLink.setAttribute("rel", "noopener noreferrer");
+    } else {
+      const link = document.createElement("a");
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      selectedImage.parentNode?.insertBefore(link, selectedImage);
+      link.appendChild(selectedImage);
+    }
+    syncContent();
+  };
+
+  const applyImageSettings = () => {
+    setCustomImageWidth(imageDraft.width);
+    applyImageCrop(imageDraft.crop, imageDraft.focusX, imageDraft.focusY);
+    editImageCaption(imageDraft.caption);
+    if (imageDraft.link) linkSelectedImage(imageDraft.link);
+    setActivePanel(null);
+  };
+
   const save = async () => {
     setBusy(true);
+    const toastId = toast.loading("Saving insight...");
     const payload = {
       title: form.title,
       slug: form.slug || slugify(form.title),
       excerpt: form.excerpt,
       content: editorRef.current?.innerHTML ?? form.content,
+      cover_image_url: form.cover_image_url || null,
+      author_id: form.author_id || user?.id || null,
+      author_name: form.author_name || "Dr. Jimrise Ochwach, PhD",
       status: form.status,
       sort_order: form.sort_order ?? 0,
       published_at: form.status === "published" ? new Date().toISOString() : null,
@@ -2540,8 +2846,30 @@ function BlogPostEditor({ post, onSaved }: { post: BlogPost; onSaved: () => void
   };
 
   return (
-    <div className="border rounded-lg bg-background overflow-hidden">
-      <div className="p-4 border-b bg-secondary/40 space-y-3">
+    <div className="border rounded-lg bg-slate-100 overflow-hidden shadow-sm">
+      <div className="p-4 border-b bg-white space-y-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h4 className="font-serif text-lg font-semibold text-navy-deep">{form.title || "Untitled insight"}</h4>
+            <p className="text-xs text-muted-foreground">Draft, format, insert media, then save or publish from one workspace.</p>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={save} disabled={busy} className="bg-navy-deep hover:bg-navy text-cream">
+              <Save size={14} className="mr-1" />{busy ? "Saving..." : "Save"}
+            </Button>
+            <ConfirmAction
+              title="Delete insight?"
+              description={`This will permanently remove "${form.title}".`}
+              confirmLabel="Delete insight"
+              destructive
+              onConfirm={remove}
+            >
+              <Button size="sm" variant="destructive">
+                <Trash2 size={14} className="mr-1" />Delete
+              </Button>
+            </ConfirmAction>
+          </div>
+        </div>
         <div className="grid md:grid-cols-5 gap-3">
           <div className="md:col-span-2">
             <Label className="text-xs">Title</Label>
@@ -2564,9 +2892,50 @@ function BlogPostEditor({ post, onSaved }: { post: BlogPost; onSaved: () => void
           <Label className="text-xs">Excerpt</Label>
           <Textarea rows={2} value={form.excerpt ?? ""} onChange={(e) => setForm({ ...form, excerpt: e.target.value })} />
         </div>
+        <div className="grid gap-3 lg:grid-cols-[220px_1fr]">
+          <div className="overflow-hidden rounded-lg border bg-secondary/30 aspect-[16/10]">
+            {form.cover_image_url ? (
+              <img
+                src={optimizedImageUrl(form.cover_image_url, 600)}
+                alt=""
+                className="h-full w-full object-cover"
+                loading="lazy"
+                decoding="async"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center px-4 text-center text-xs text-muted-foreground">
+                Hero image preview
+              </div>
+            )}
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <Label className="text-xs">Insight hero image</Label>
+              <label className="mt-1 flex h-10 items-center justify-center gap-2 rounded-md border bg-background px-3 text-sm cursor-pointer hover:bg-accent">
+                <Image size={15} />
+                {coverUploading ? "Uploading..." : form.cover_image_url ? "Change hero image" : "Upload hero image"}
+                <input type="file" accept="image/*" className="hidden" disabled={coverUploading} onChange={(e) => e.target.files?.[0] && uploadCoverImage(e.target.files[0])} />
+              </label>
+              {form.cover_image_url && (
+                <Button type="button" size="sm" variant="ghost" className="mt-1 px-0 text-xs text-destructive hover:text-destructive" onClick={() => setForm({ ...form, cover_image_url: null })}>
+                  Remove image
+                </Button>
+              )}
+            </div>
+            <div>
+              <Label className="text-xs">Author full name</Label>
+              <Input
+                value={form.author_name ?? "Dr. Jimrise Ochwach, PhD"}
+                onChange={(e) => setForm({ ...form, author_name: e.target.value })}
+                placeholder="Dr. Jimrise Ochwach, PhD"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">This name appears on public insight cards.</p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="p-3 border-b bg-card space-y-2">
+      <div className="sticky top-0 z-20 p-3 border-b bg-white/95 backdrop-blur space-y-2 shadow-sm">
         <div className="flex flex-wrap gap-2 items-center">
         <select onChange={(e) => exec("formatBlock", e.target.value)} className="h-8 rounded-md border px-2 text-xs bg-background" aria-label="Paragraph style">
           <option value="p">Paragraph</option>
@@ -2605,7 +2974,7 @@ function BlogPostEditor({ post, onSaved }: { post: BlogPost; onSaved: () => void
         <ToolbarButton label="Numbered list" onClick={() => exec("insertOrderedList")}><ListOrdered size={14} /></ToolbarButton>
         <ToolbarButton label="Quote" onClick={() => exec("formatBlock", "blockquote")}><Quote size={14} /></ToolbarButton>
         <ToolbarButton label="Line" onClick={() => exec("insertHorizontalRule")}><Minus size={14} /></ToolbarButton>
-        <ToolbarButton label="Table" onClick={addTable}><Table2 size={14} /></ToolbarButton>
+        <ToolbarButton label="Table" onClick={() => openPanel("table")}><Table2 size={14} /></ToolbarButton>
         <label className="h-8 px-2 rounded-md border bg-background text-xs flex items-center gap-1 cursor-pointer">
           <Palette size={14} />
           <input type="color" className="w-6 h-5 border-0 bg-transparent" onChange={(e) => exec("foreColor", e.target.value)} aria-label="Text color" />
@@ -2615,25 +2984,205 @@ function BlogPostEditor({ post, onSaved }: { post: BlogPost; onSaved: () => void
           <input type="color" className="w-6 h-5 border-0 bg-transparent" onChange={(e) => exec("backColor", e.target.value)} aria-label="Highlight color" />
         </label>
         <ToolbarButton label="Clear formatting" onClick={() => exec("removeFormat")}><Eraser size={14} /></ToolbarButton>
-        <ToolbarButton label="Link" onClick={addLink}><LinkIcon size={14} /></ToolbarButton>
-        <ToolbarButton label="Button" onClick={addButton}><MousePointerClick size={14} /></ToolbarButton>
+        <ToolbarButton label="Link" onClick={() => openPanel("link")}><LinkIcon size={14} /></ToolbarButton>
+        <ToolbarButton label="Embed link card" onClick={() => openPanel("embed")}><Link2 size={14} /></ToolbarButton>
+        <ToolbarButton label="Button" onClick={() => openPanel("button")}><MousePointerClick size={14} /></ToolbarButton>
         <ToolbarButton label="Callout" onClick={addCallout}><FileText size={14} /></ToolbarButton>
         <label className="h-8 px-3 rounded-md border bg-background text-xs flex items-center gap-2 cursor-pointer hover:bg-accent">
           <Image size={14} /> {uploading ? "Uploading..." : "Image"}
           <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadImage(e.target.files[0])} disabled={uploading} />
         </label>
         </div>
+        <div className="flex flex-wrap gap-2 items-center rounded-md border bg-secondary/30 p-2">
+          <span className="text-xs font-semibold text-navy-deep px-1">
+            {selectedImage ? "Image selected" : "Select an image to resize or position"}
+          </span>
+          <ToolbarButton label="Image left" onClick={() => updateImageLayout("left")}><PanelLeft size={14} /></ToolbarButton>
+          <ToolbarButton label="Image center" onClick={() => updateImageLayout("center")}><AlignCenter size={14} /></ToolbarButton>
+          <ToolbarButton label="Image right" onClick={() => updateImageLayout("right")}><PanelRight size={14} /></ToolbarButton>
+          <ToolbarButton label="Full width image" onClick={() => updateImageLayout("full")}><Maximize2 size={14} /></ToolbarButton>
+          <button type="button" onClick={() => resizeSelectedImage("25%")} className="h-8 px-2 rounded-md border bg-background text-xs hover:bg-accent">25%</button>
+          <button type="button" onClick={() => resizeSelectedImage("50%")} className="h-8 px-2 rounded-md border bg-background text-xs hover:bg-accent">50%</button>
+          <button type="button" onClick={() => resizeSelectedImage("75%")} className="h-8 px-2 rounded-md border bg-background text-xs hover:bg-accent">75%</button>
+          <button type="button" onClick={() => resizeSelectedImage("100%")} className="h-8 px-2 rounded-md border bg-background text-xs hover:bg-accent">100%</button>
+          <ToolbarButton label="Image settings" onClick={() => openPanel("image")}><Captions size={14} /></ToolbarButton>
+        </div>
+        {activePanel && (
+          <div className="rounded-lg border bg-white p-3 shadow-sm">
+            {activePanel === "link" && (
+              <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto] items-end">
+                <div>
+                  <Label className="text-xs">URL</Label>
+                  <Input value={linkDraft.url} onChange={(e) => setLinkDraft({ ...linkDraft, url: e.target.value })} placeholder="https://example.com" />
+                </div>
+                <div>
+                  <Label className="text-xs">Text optional</Label>
+                  <Input value={linkDraft.text} onChange={(e) => setLinkDraft({ ...linkDraft, text: e.target.value })} placeholder="Leave empty to link selected text" />
+                </div>
+                <PanelActions onApply={addLink} onCancel={() => setActivePanel(null)} />
+              </div>
+            )}
+            {activePanel === "embed" && (
+              <div className="grid gap-2 md:grid-cols-3 items-end">
+                <div>
+                  <Label className="text-xs">URL</Label>
+                  <Input value={embedDraft.url} onChange={(e) => setEmbedDraft({ ...embedDraft, url: e.target.value })} placeholder="https://example.com" />
+                </div>
+                <div>
+                  <Label className="text-xs">Title</Label>
+                  <Input value={embedDraft.title} onChange={(e) => setEmbedDraft({ ...embedDraft, title: e.target.value })} placeholder="Resource title" />
+                </div>
+                <div>
+                  <Label className="text-xs">Description</Label>
+                  <Input value={embedDraft.description} onChange={(e) => setEmbedDraft({ ...embedDraft, description: e.target.value })} placeholder="Short description" />
+                </div>
+                <div className="md:col-span-3 flex justify-end">
+                  <PanelActions onApply={addEmbeddedLink} onCancel={() => setActivePanel(null)} />
+                </div>
+              </div>
+            )}
+            {activePanel === "button" && (
+              <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto] items-end">
+                <div>
+                  <Label className="text-xs">Button text</Label>
+                  <Input value={buttonDraft.label} onChange={(e) => setButtonDraft({ ...buttonDraft, label: e.target.value })} />
+                </div>
+                <div>
+                  <Label className="text-xs">URL</Label>
+                  <Input value={buttonDraft.url} onChange={(e) => setButtonDraft({ ...buttonDraft, url: e.target.value })} placeholder="https://example.com" />
+                </div>
+                <PanelActions onApply={addButton} onCancel={() => setActivePanel(null)} />
+              </div>
+            )}
+            {activePanel === "table" && (
+              <div className="grid gap-2 md:grid-cols-[140px_140px_auto] items-end">
+                <div>
+                  <Label className="text-xs">Rows</Label>
+                  <Input type="number" min={1} value={tableDraft.rows} onChange={(e) => setTableDraft({ ...tableDraft, rows: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Columns</Label>
+                  <Input type="number" min={1} value={tableDraft.cols} onChange={(e) => setTableDraft({ ...tableDraft, cols: Number(e.target.value) })} />
+                </div>
+                <PanelActions onApply={addTable} onCancel={() => setActivePanel(null)} />
+              </div>
+            )}
+            {activePanel === "image" && (
+              <div className="space-y-3">
+                <div className="grid gap-2 md:grid-cols-[1fr_1fr_160px_auto] items-end">
+                <div>
+                  <Label className="text-xs">Caption</Label>
+                  <Input value={imageDraft.caption} onChange={(e) => setImageDraft({ ...imageDraft, caption: e.target.value })} placeholder="Image caption" />
+                </div>
+                <div>
+                  <Label className="text-xs">Image link optional</Label>
+                  <Input value={imageDraft.link} onChange={(e) => setImageDraft({ ...imageDraft, link: e.target.value })} placeholder="https://example.com" />
+                </div>
+                <div>
+                  <Label className="text-xs">Width %</Label>
+                  <Input type="number" min={15} max={100} value={imageDraft.width} onChange={(e) => setImageDraft({ ...imageDraft, width: e.target.value })} />
+                </div>
+                <PanelActions onApply={applyImageSettings} onCancel={() => setActivePanel(null)} />
+                </div>
+                <div className="grid gap-3 md:grid-cols-[1fr_1fr]">
+                  <div className="rounded-md border bg-secondary/20 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <Label className="text-xs">Resize image</Label>
+                      <span className="text-xs font-semibold text-navy-deep">{imageDraft.width}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={15}
+                      max={100}
+                      value={imageDraft.width}
+                      onChange={(e) => {
+                        setImageDraft({ ...imageDraft, width: e.target.value });
+                        setCustomImageWidth(e.target.value);
+                      }}
+                      className="mt-2 w-full accent-[#c9a84c]"
+                    />
+                  </div>
+                  <div className="rounded-md border bg-secondary/20 p-3">
+                    <Label className="text-xs">Crop shape</Label>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {[
+                        ["none", "Original"],
+                        ["16 / 9", "Wide"],
+                        ["4 / 3", "Standard"],
+                        ["1 / 1", "Square"],
+                        ["3 / 4", "Portrait"],
+                      ].map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => applyImageCrop(value)}
+                          className={cn("h-8 rounded-md border px-2 text-xs hover:bg-accent", imageDraft.crop === value && "border-gold bg-gold/10 text-navy-deep")}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-md border bg-secondary/20 p-3 md:col-span-2">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <Label className="text-xs">Crop focus</Label>
+                      <span className="text-xs text-muted-foreground">For cropped images, drag directly on the image or use these sliders.</span>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2 mt-2">
+                      <label className="text-xs text-muted-foreground">
+                        Horizontal {imageDraft.focusX}%
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={imageDraft.focusX}
+                          onChange={(e) => applyImageCrop(imageDraft.crop, e.target.value, imageDraft.focusY)}
+                          className="mt-1 w-full accent-[#c9a84c]"
+                        />
+                      </label>
+                      <label className="text-xs text-muted-foreground">
+                        Vertical {imageDraft.focusY}%
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={imageDraft.focusY}
+                          onChange={(e) => applyImageCrop(imageDraft.crop, imageDraft.focusX, e.target.value)}
+                          className="mt-1 w-full accent-[#c9a84c]"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      <div
-        ref={editorRef}
-        contentEditable
-        suppressContentEditableWarning
-        onInput={syncContent}
-        data-placeholder="Start writing the insight here..."
-        className="blog-editor-content min-h-[520px] p-6 md:p-10 bg-white text-foreground leading-relaxed focus:outline-none"
-        style={{ fontFamily: "Inter, system-ui, sans-serif" }}
-      />
+      <div className="blog-editor-stage px-3 py-6 md:px-8 md:py-10">
+        <div
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={syncContent}
+          onClick={(e) => { selectImageFromTarget(e.target); saveSelection(); }}
+          onPointerDown={startCropDrag}
+          onPointerMove={moveCropFocus}
+          onPointerUp={stopCropDrag}
+          onPointerCancel={stopCropDrag}
+          onDragStart={handleImageDragStart}
+          onDragOver={handleImageDragOver}
+          onDrop={handleImageDrop}
+          onDragEnd={handleImageDragEnd}
+          onKeyUp={saveSelection}
+          onMouseUp={saveSelection}
+          onBlur={saveSelection}
+          data-placeholder="Start writing the insight here..."
+          className="blog-editor-content min-h-[720px] p-6 md:p-12 bg-white text-foreground leading-relaxed focus:outline-none"
+          style={{ fontFamily: "Inter, system-ui, sans-serif" }}
+        />
+      </div>
 
       <div className="p-4 border-t bg-secondary/30 flex flex-wrap gap-2 justify-between">
         <div className="text-xs text-muted-foreground pt-2">
@@ -2660,9 +3209,22 @@ function BlogPostEditor({ post, onSaved }: { post: BlogPost; onSaved: () => void
   );
 }
 
+function PanelActions({ onApply, onCancel }: { onApply: () => void; onCancel: () => void }) {
+  return (
+    <div className="flex gap-2 justify-end">
+      <Button type="button" size="sm" onClick={onApply} className="bg-navy-deep text-cream hover:bg-navy">
+        Apply
+      </Button>
+      <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+        Cancel
+      </Button>
+    </div>
+  );
+}
+
 function ToolbarButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" title={label} aria-label={label} onClick={onClick}
+    <button type="button" title={label} aria-label={label} onMouseDown={(e) => e.preventDefault()} onClick={onClick}
       className="h-8 min-w-8 px-2 rounded-md border bg-background text-xs inline-flex items-center justify-center hover:bg-accent">
       {children}
     </button>

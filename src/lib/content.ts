@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { publicationCache } from "@/lib/publication-cache";
 
 export type HeroContent = {
   name: string;
@@ -67,6 +68,9 @@ export type BlogPost = {
   slug: string;
   excerpt: string | null;
   content: string;
+  cover_image_url?: string | null;
+  author_id?: string | null;
+  author_name?: string | null;
   status: "draft" | "published";
   published_at: string | null;
   sort_order: number;
@@ -93,6 +97,9 @@ export function useSiteContent<T>(key: string, fallback: T) {
   const q = useQuery({
     queryKey: ["site_content", key],
     queryFn: async () => {
+      const { data: rpcData, error: rpcError } = await (supabase.rpc as any)("get_site_content_value", { content_key: key });
+      if (!rpcError && rpcData) return ((rpcData as T) ?? fallback) as T;
+
       const { data } = await supabase.from("site_content").select("value").eq("key", key).maybeSingle();
       return ((data?.value as T) ?? fallback) as T;
     },
@@ -244,7 +251,7 @@ export function useStudentGroups() {
       if (error) throw error;
       return (data ?? []) as StudentGroup[];
     },
-    initialData: [],
+    placeholderData: [],
     staleTime: 60_000,
     retry: 1,
     refetchOnWindowFocus: false,
@@ -298,6 +305,9 @@ export function useAllPublications() {
   return useQuery({
     queryKey: ["publications", "all"],
     queryFn: async () => {
+      const { data: rpcData, error: rpcError } = await (supabase.rpc as any)("list_public_publications");
+      if (!rpcError) return (rpcData ?? []) as Publication[];
+
       const { data, error } = await supabase
         .from("publications")
         .select("id,kind,title,authors,venue,year,doi,article_url,pdf_url,pdf_download_allowed,sort_order")
@@ -307,7 +317,8 @@ export function useAllPublications() {
       if (error) throw error;
       return (data ?? []) as Publication[];
     },
-    initialData: [],
+    initialData: publicationCache,
+    initialDataUpdatedAt: 0,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
