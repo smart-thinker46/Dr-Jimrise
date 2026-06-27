@@ -17,7 +17,7 @@ import {
   type HeroContent,
   type HomeStatsContent,
 } from "@/lib/content";
-import { optimizedImageSrcSet, optimizedImageUrl } from "@/lib/images";
+import { optimizedImageSrcSet, optimizedImageUrl, retryOriginalImage } from "@/lib/images";
 import { seoHead } from "@/lib/seo";
 import { cn } from "@/lib/utils";
 
@@ -98,6 +98,7 @@ function Home() {
                   src={optimizedImageUrl(hero.photo_url, 720, 72, "contain")}
                   srcSet={optimizedImageSrcSet(hero.photo_url, [360, 540, 720, 960], 72, "contain")}
                   sizes="(min-width: 1024px) 420px, min(100vw - 2rem, 448px)"
+                  onError={(event) => retryOriginalImage(event, hero.photo_url)}
                   alt={hero.name}
                   width={720}
                   height={900}
@@ -255,6 +256,7 @@ function Home() {
                           <img
                             src={optimizedImageUrl(post.cover_image_url, 600)}
                             alt=""
+                            onError={(event) => retryOriginalImage(event, post.cover_image_url || "")}
                             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                             loading="lazy"
                             decoding="async"

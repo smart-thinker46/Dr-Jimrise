@@ -3,6 +3,12 @@ export function optimizedImageUrl(src: string, width: number, quality = 72, resi
 
   try {
     const url = new URL(src);
+    if (url.pathname.includes("/storage/v1/render/image/public/")) {
+      url.searchParams.set("width", String(width));
+      url.searchParams.set("quality", String(quality));
+      url.searchParams.set("resize", resize);
+      return url.toString();
+    }
     if (!url.pathname.includes("/storage/v1/object/public/")) return src;
 
     url.pathname = url.pathname.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/");
@@ -17,4 +23,28 @@ export function optimizedImageUrl(src: string, width: number, quality = 72, resi
 
 export function optimizedImageSrcSet(src: string, widths: number[], quality = 72, resize: "cover" | "contain" = "cover") {
   return widths.map((width) => `${optimizedImageUrl(src, width, quality, resize)} ${width}w`).join(", ");
+}
+
+export function originalStorageImageUrl(src: string) {
+  if (!src) return src;
+  try {
+    const url = new URL(src);
+    if (url.pathname.includes("/storage/v1/render/image/public/")) {
+      url.pathname = url.pathname.replace("/storage/v1/render/image/public/", "/storage/v1/object/public/");
+      url.search = "";
+      return url.toString();
+    }
+    return src;
+  } catch {
+    return src;
+  }
+}
+
+export function retryOriginalImage(event: { currentTarget: HTMLImageElement }, originalSrc: string) {
+  const image = event.currentTarget;
+  const fallback = originalStorageImageUrl(originalSrc);
+  image.removeAttribute("srcset");
+  if (fallback && image.src !== fallback) {
+    image.src = fallback;
+  }
 }

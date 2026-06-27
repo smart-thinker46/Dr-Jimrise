@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Layout, PageHeader } from "@/components/Layout";
 import { useBlogs } from "@/lib/content";
-import { optimizedImageUrl } from "@/lib/images";
+import { optimizedImageUrl, retryOriginalImage } from "@/lib/images";
 import { seoHead } from "@/lib/seo";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +52,7 @@ function BlogsPage() {
                         <img
                           src={optimizedImageUrl(post.cover_image_url, 800)}
                           alt=""
+                          onError={(event) => retryOriginalImage(event, post.cover_image_url || "")}
                           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                           loading="lazy"
                           decoding="async"

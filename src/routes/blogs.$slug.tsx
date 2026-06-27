@@ -3,7 +3,7 @@ import { ArrowLeft, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Layout, PageHeader } from "@/components/Layout";
 import { useBlog } from "@/lib/content";
-import { optimizedImageUrl } from "@/lib/images";
+import { optimizedImageUrl, retryOriginalImage } from "@/lib/images";
 import { seoHead } from "@/lib/seo";
 import { sanitizeHtml } from "@/lib/security";
 
@@ -65,6 +65,7 @@ function BlogPostPage() {
               <img
                 src={optimizedImageUrl(post.cover_image_url, 1200)}
                 alt=""
+                onError={(event) => retryOriginalImage(event, post.cover_image_url || "")}
                 className="h-full w-full object-cover"
                 loading="eager"
                 decoding="async"

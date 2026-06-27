@@ -12,7 +12,7 @@ import {
   leadership as leadershipFallback,
 } from "@/lib/site-data";
 import { useSiteContent, aboutFallback, type AboutContent } from "@/lib/content";
-import { optimizedImageSrcSet, optimizedImageUrl } from "@/lib/images";
+import { optimizedImageSrcSet, optimizedImageUrl, retryOriginalImage } from "@/lib/images";
 import { seoHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/about")({
@@ -56,6 +56,7 @@ function AboutPage() {
                   src={optimizedImageUrl(about.photo_url, 640, 72, "contain")}
                   srcSet={optimizedImageSrcSet(about.photo_url, [320, 480, 640, 800], 72, "contain")}
                   sizes="(min-width: 1024px) 33vw, calc(100vw - 2rem)"
+                  onError={(event) => retryOriginalImage(event, about.photo_url)}
                   alt="Dr. Jimrise Ochwach"
                   width={640}
                   height={800}
