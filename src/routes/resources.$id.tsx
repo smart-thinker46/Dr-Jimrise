@@ -25,6 +25,7 @@ function ResourceViewerPage() {
   const { data: accessStatus = "active" } = useUserAccessStatus(user);
   const { data: resource, isLoading } = useQuery({
     queryKey: ["resource", id],
+    enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("resources")
@@ -37,15 +38,33 @@ function ResourceViewerPage() {
   });
   const { data: signedFileUrl, isLoading: signingFile } = useQuery({
     queryKey: ["resource", id, "signed-file", resource?.file_url ?? null],
-    enabled: !!resource?.file_url,
+    enabled: !!user && !!resource?.file_url,
     queryFn: () => getSignedStorageUrl("resources", resource.file_url, 60 * 10),
     staleTime: 60 * 8,
   });
 
-  if (isLoading || authLoading || signingFile) {
+  if (authLoading || (user && (isLoading || signingFile))) {
     return (
       <Layout plain>
         <PageHeader eyebrow="Resource" title="Loading resource" />
+      </Layout>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Layout plain>
+        <PageHeader eyebrow="Resource" title="Login required" subtitle="Please sign in before opening or downloading resources." />
+        <section className="py-12 bg-background">
+          <div className="mx-auto flex max-w-4xl flex-wrap gap-3 px-4 sm:px-6 lg:px-8">
+            <Button asChild variant="outline">
+              <Link to="/resources"><ArrowLeft size={16} className="mr-2" />Back to resources</Link>
+            </Button>
+            <Button asChild className="bg-navy-deep text-cream hover:bg-navy">
+              <Link to="/auth">Login to access</Link>
+            </Button>
+          </div>
+        </section>
       </Layout>
     );
   }
@@ -58,24 +77,6 @@ function ResourceViewerPage() {
           <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
             <Button asChild variant="outline">
               <Link to="/resources"><ArrowLeft size={16} className="mr-2" />Back to resources</Link>
-            </Button>
-          </div>
-        </section>
-      </Layout>
-    );
-  }
-
-  if (resource.access_level === "authenticated" && !user) {
-    return (
-      <Layout plain>
-        <PageHeader eyebrow="Resource" title="Login required" subtitle="This resource is available only to logged-in users." />
-        <section className="py-12 bg-background">
-          <div className="mx-auto flex max-w-4xl flex-wrap gap-3 px-4 sm:px-6 lg:px-8">
-            <Button asChild variant="outline">
-              <Link to="/resources"><ArrowLeft size={16} className="mr-2" />Back to resources</Link>
-            </Button>
-            <Button asChild className="bg-navy-deep text-cream hover:bg-navy">
-              <Link to="/auth">Login to access</Link>
             </Button>
           </div>
         </section>

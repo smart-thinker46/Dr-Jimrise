@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Megaphone, BookOpen, Download, Clock, Mail, FileText, FileType, Presentation, ExternalLink, Eye, Lock } from "lucide-react";
+import { Megaphone, BookOpen, Download, Clock, Mail, FileText, FileType, Presentation, ExternalLink, Eye, Lock, FileArchive, Video } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Layout, PageHeader } from "@/components/Layout";
@@ -26,7 +26,7 @@ function ResourcesPage() {
   const [filter, setFilter] = useState<string>("All");
   const { data: announcementsData } = useAnnouncements();
   const { user } = useAuth();
-  const { data: resourcesData } = useResourceDirectory();
+  const { data: resourcesData, isLoading: resourcesLoading, isFetching: resourcesFetching, error: resourcesError } = useResourceDirectory();
   const { data: courses } = useSiteContent<typeof coursesFallback>("courses", coursesFallback);
   const { data: accessStatus = "active" } = useUserAccessStatus(user);
   const announcements = announcementsData ?? [];
@@ -34,7 +34,15 @@ function ResourcesPage() {
 
   const courseFilters = ["All", ...Array.from(new Set(resources.map((r) => r.course)))];
   const filtered = filter === "All" ? resources : resources.filter((r) => r.course === filter);
-  const fileIcon = (t: string) => (t === "PPT" ? Presentation : t === "DOC" ? FileType : FileText);
+  const fileIcon = (resource: ResourceDirectoryItem) => {
+    const kind = resourceKind(resource);
+    if (kind === "link") return ExternalLink;
+    if (kind === "presentation") return Presentation;
+    if (kind === "document" || kind === "spreadsheet") return FileType;
+    if (kind === "archive") return FileArchive;
+    if (kind === "video") return Video;
+    return FileText;
+  };
 
   return (
     <Layout plain>
@@ -52,7 +60,7 @@ function ResourcesPage() {
             </Card>
           ) : null}
 
-          <div className="mb-14">
+          <div id="announcements" className="mb-14 scroll-mt-28">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-lg bg-gold flex items-center justify-center">
                 <Megaphone size={20} className="text-navy-deep" />
@@ -91,7 +99,7 @@ function ResourcesPage() {
             </div>
           </div>
 
-          <div className="mb-14">
+          <div id="resource-library" className="mb-14 scroll-mt-28">
             <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
               <h2 className="font-serif text-2xl md:text-3xl font-bold text-navy-deep">Resource Library</h2>
               <div className="flex flex-wrap gap-2">
@@ -110,9 +118,42 @@ function ResourcesPage() {
               </div>
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(resourcesLoading || resourcesFetching) && filtered.length === 0 && (
+                Array.from({ length: 6 }).map((_, index) => (
+                  <Card key={index} className="animate-pulse">
+                    <CardContent className="pt-5">
+                      <div className="flex items-start gap-4">
+                        <div className="h-11 w-11 rounded-lg bg-secondary" />
+                        <div className="flex-1 space-y-3">
+                          <div className="h-4 w-3/4 rounded bg-secondary" />
+                          <div className="h-3 w-1/2 rounded bg-secondary" />
+                          <div className="h-8 w-full rounded bg-secondary" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+              {resourcesError && filtered.length === 0 && !resourcesLoading && !resourcesFetching && (
+                <Card className="sm:col-span-2 lg:col-span-3 border-destructive/40">
+                  <CardContent className="pt-6">
+                    <p className="font-semibold text-destructive">Resources could not load.</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Please refresh this page. If this continues, the resource directory database function may need to be refreshed.</p>
+                  </CardContent>
+                </Card>
+              )}
+              {!resourcesLoading && !resourcesFetching && !resourcesError && filtered.length === 0 && (
+                <Card className="sm:col-span-2 lg:col-span-3">
+                  <CardContent className="pt-6">
+                    <p className="font-semibold text-navy-deep">No resources available yet.</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Uploaded resources will appear here automatically after the admin publishes them.</p>
+                  </CardContent>
+                </Card>
+              )}
               {filtered.map((r) => {
-                const Icon = fileIcon(r.type);
+                const Icon = fileIcon(r);
                 const action = getResourceAction(r, Boolean(user));
+                const type = resourceTypeLabel(r);
                 return (
                   <Card key={r.id} className="hover:shadow-lg hover:border-gold/50 transition-all">
                     <CardContent className="pt-5">
@@ -122,6 +163,14 @@ function ResourcesPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-navy-deep leading-snug">{r.title}</p>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-1 text-[11px] font-bold text-navy-deep">
+                              <Icon size={11} /> {type}
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-navy-deep/5 px-2 py-1 text-[11px] font-semibold text-navy-deep/75">
+                              {r.source_type === "link" ? "External link" : r.allow_download === false ? "View only" : "Download allowed"}
+                            </span>
+                          </div>
                           <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-2 text-xs text-muted-foreground">
                             <span className="text-gold font-semibold">{r.course}</span>
                             <span>·</span><span>{r.type}</span><span>·</span><span>{r.date}</span>
@@ -201,7 +250,7 @@ function ResourcesPage() {
 }
 
 function getResourceAction(resource: ResourceDirectoryItem, isLoggedIn: boolean) {
-  if (!resource.can_access && !isLoggedIn) {
+  if (!isLoggedIn) {
     return { kind: "login", href: "/auth", label: "Login to access", icon: "lock", download: false };
   }
   if (!resource.can_access) {
@@ -217,6 +266,32 @@ function getResourceAction(resource: ResourceDirectoryItem, isLoggedIn: boolean)
     return { kind: "internal", href: `/resources/${resource.id}`, label: "View", icon: "view", download: false };
   }
   return { kind: "internal", href: `/resources/${resource.id}`, label: "Open", icon: "view", download: false };
+}
+
+function resourceKind(resource: ResourceDirectoryItem) {
+  const value = `${resource.source_type ?? ""} ${resource.type ?? ""} ${resource.file_url ?? ""} ${resource.link_url ?? ""}`.toLowerCase();
+  if (resource.source_type === "link" || value.includes("link")) return "link";
+  if (/\b(pdf)\b|\.pdf(\?|$)/i.test(value)) return "pdf";
+  if (/\b(doc|docx|document)\b|\.(doc|docx)(\?|$)/i.test(value)) return "document";
+  if (/\b(ppt|pptx|presentation)\b|\.(ppt|pptx)(\?|$)/i.test(value)) return "presentation";
+  if (/\b(xls|xlsx|csv|spreadsheet)\b|\.(xls|xlsx|csv)(\?|$)/i.test(value)) return "spreadsheet";
+  if (/\b(zip|rar|7z|archive)\b|\.(zip|rar|7z)(\?|$)/i.test(value)) return "archive";
+  if (/\b(video|mp4|mov|webm)\b|\.(mp4|mov|webm)(\?|$)/i.test(value)) return "video";
+  return "file";
+}
+
+function resourceTypeLabel(resource: ResourceDirectoryItem) {
+  const labels: Record<string, string> = {
+    link: "Link",
+    pdf: "PDF",
+    document: "Document",
+    presentation: "Presentation",
+    spreadsheet: "Spreadsheet",
+    archive: "Archive",
+    video: "Video",
+    file: resource.type || "File",
+  };
+  return labels[resourceKind(resource)] ?? resource.type ?? "File";
 }
 
 function normalizeUrl(value?: string | null) {

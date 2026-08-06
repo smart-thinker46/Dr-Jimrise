@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, BookOpen, Users, GraduationCap, FileText, Activity, Microscope, BarChart3, Waves, Bell, Download, PenLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
+  const navigate = useNavigate();
   const { data: hero } = useSiteContent<HeroContent>("hero", heroFallback);
   const { data: about } = useSiteContent<AboutContent>("about", aboutFallback);
   const { data: homeStats } = useSiteContent<HomeStatsContent>("home_stats", homeStatsFallback);
@@ -208,49 +209,73 @@ function Home() {
             </Button>
           </div>
           <div className="grid lg:grid-cols-3 gap-5">
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Bell size={18} className="text-gold" />
-                  <h3 className="font-serif text-lg font-semibold text-navy-deep">Announcements</h3>
-                </div>
-                <div className="space-y-3">
-                  {latestAnnouncements.length > 0 ? latestAnnouncements.map((item) => (
-                    <div key={item.id} className="border-b border-border pb-3 last:border-0">
-                      <p className="text-sm font-semibold text-navy-deep">{item.title}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{item.date}</p>
-                    </div>
-                  )) : <p className="text-sm text-muted-foreground">No announcements yet.</p>}
-                </div>
-              </CardContent>
-            </Card>
+            <Link to="/resources" hash="announcements" className="group block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2">
+              <Card className="h-full transition-all group-hover:-translate-y-1 group-hover:border-gold/60 group-hover:shadow-xl">
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Bell size={18} className="text-gold" />
+                    <h3 className="font-serif text-lg font-semibold text-navy-deep">Announcements</h3>
+                    <ArrowRight size={15} className="ml-auto text-gold opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100" />
+                  </div>
+                  <div className="space-y-3">
+                    {latestAnnouncements.length > 0 ? latestAnnouncements.map((item) => (
+                      <div key={item.id} className="border-b border-border pb-3 last:border-0">
+                        <p className="text-sm font-semibold text-navy-deep">{item.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{item.date}</p>
+                      </div>
+                    )) : <p className="text-sm text-muted-foreground">No announcements yet.</p>}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
 
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Download size={18} className="text-gold" />
-                  <h3 className="font-serif text-lg font-semibold text-navy-deep">Recent Resources</h3>
-                </div>
-                <div className="space-y-3">
-                  {latestResources.length > 0 ? latestResources.map((item) => (
-                    <div key={item.id} className="border-b border-border pb-3 last:border-0">
-                      <p className="text-sm font-semibold text-navy-deep">{item.title}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{item.course} · {item.type}</p>
-                    </div>
-                  )) : <p className="text-sm text-muted-foreground">No resources uploaded yet.</p>}
-                </div>
-              </CardContent>
-            </Card>
+            <Link to="/resources" hash="resource-library" className="group block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2">
+              <Card className="h-full transition-all group-hover:-translate-y-1 group-hover:border-gold/60 group-hover:shadow-xl">
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Download size={18} className="text-gold" />
+                    <h3 className="font-serif text-lg font-semibold text-navy-deep">Recent Resources</h3>
+                    <ArrowRight size={15} className="ml-auto text-gold opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100" />
+                  </div>
+                  <div className="space-y-3">
+                    {latestResources.length > 0 ? latestResources.map((item) => (
+                      <div key={item.id} className="border-b border-border pb-3 last:border-0">
+                        <p className="text-sm font-semibold text-navy-deep">{item.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{item.course} · {item.type}</p>
+                      </div>
+                    )) : <p className="text-sm text-muted-foreground">No resources uploaded yet.</p>}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
 
-            <Card className="lg:col-span-3">
+            <Card
+              role="link"
+              tabIndex={0}
+              onClick={() => navigate({ to: "/blogs" })}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  navigate({ to: "/blogs" });
+                }
+              }}
+              className="group/insights cursor-pointer transition-all hover:-translate-y-1 hover:border-gold/60 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 lg:col-span-3"
+            >
               <CardContent className="pt-6">
                 <div className="flex items-center gap-2 mb-4">
                   <PenLine size={18} className="text-gold" />
                   <h3 className="font-serif text-lg font-semibold text-navy-deep">Latest Insights</h3>
+                  <ArrowRight size={15} className="ml-auto text-gold opacity-0 transition-all group-hover/insights:translate-x-1 group-hover/insights:opacity-100" />
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {latestBlogs.length > 0 ? latestBlogs.map((post) => (
-                    <Link key={post.id} to="/blogs/$slug" params={{ slug: post.slug || post.id }} className="group flex h-full flex-col overflow-hidden rounded-lg border bg-background hover:border-gold hover:shadow-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2">
+                    <Link
+                      key={post.id}
+                      to="/blogs/$slug"
+                      params={{ slug: post.slug || post.id }}
+                      onClick={(event) => event.stopPropagation()}
+                      className="group flex h-full flex-col overflow-hidden rounded-lg border bg-background hover:border-gold hover:shadow-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2"
+                    >
                       <div className="aspect-[16/9] overflow-hidden bg-secondary">
                         {post.cover_image_url ? (
                           <img

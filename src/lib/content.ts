@@ -242,7 +242,21 @@ export function useResourceDirectory() {
     queryKey: ["resource-directory"],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("list_resource_directory" as any);
-      if (error) throw error;
+      if (error) {
+        const { data: fallback, error: fallbackError } = await supabase
+          .from("resources")
+          .select("id,title,course,type,date,description,sort_order,created_at,source_type,allow_download,access_level")
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: false });
+        if (fallbackError) throw error;
+        return (fallback ?? []).map((resource: any) => ({
+          ...resource,
+          file_url: null,
+          link_url: null,
+          can_access: false,
+          allowed_groups: [],
+        })) as ResourceDirectoryItem[];
+      }
       return (data ?? []) as ResourceDirectoryItem[];
     },
     initialData: [],
