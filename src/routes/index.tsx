@@ -8,7 +8,7 @@ import { HeroBackground } from "@/components/HeroBackground";
 import {
   useAnnouncements,
   useBlogs,
-  useResources,
+  useResourceDirectory,
   useSiteContent,
   aboutFallback,
   heroFallback,
@@ -39,7 +39,7 @@ function Home() {
   const { data: about } = useSiteContent<AboutContent>("about", aboutFallback);
   const { data: homeStats } = useSiteContent<HomeStatsContent>("home_stats", homeStatsFallback);
   const { data: announcements = [] } = useAnnouncements();
-  const { data: resources = [] } = useResources();
+  const { data: resources = [] } = useResourceDirectory();
   const { data: blogs = [] } = useBlogs();
 
   const sections = [
@@ -215,7 +215,10 @@ function Home() {
                   <div className="flex items-center gap-2 mb-4">
                     <Bell size={18} className="text-gold" />
                     <h3 className="font-serif text-lg font-semibold text-navy-deep">Announcements</h3>
-                    <ArrowRight size={15} className="ml-auto text-gold opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100" />
+                    <span className="ml-auto rounded-full bg-gold/15 px-2.5 py-1 text-xs font-bold text-navy-deep">
+                      {announcements.length}
+                    </span>
+                    <ArrowRight size={15} className="text-gold opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100" />
                   </div>
                   <div className="space-y-3">
                     {latestAnnouncements.length > 0 ? latestAnnouncements.map((item) => (
@@ -235,7 +238,10 @@ function Home() {
                   <div className="flex items-center gap-2 mb-4">
                     <Download size={18} className="text-gold" />
                     <h3 className="font-serif text-lg font-semibold text-navy-deep">Recent Resources</h3>
-                    <ArrowRight size={15} className="ml-auto text-gold opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100" />
+                    <span className="ml-auto rounded-full bg-gold/15 px-2.5 py-1 text-xs font-bold text-navy-deep">
+                      {resources.length}
+                    </span>
+                    <ArrowRight size={15} className="text-gold opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100" />
                   </div>
                   <div className="space-y-3">
                     {latestResources.length > 0 ? latestResources.map((item) => (
