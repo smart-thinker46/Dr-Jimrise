@@ -259,7 +259,7 @@ export function useResourceDirectory() {
       }
       return (data ?? []) as ResourceDirectoryItem[];
     },
-    initialData: [],
+    placeholderData: [],
     staleTime: 30_000,
   });
 }

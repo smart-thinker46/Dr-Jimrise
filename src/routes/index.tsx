@@ -39,7 +39,7 @@ function Home() {
   const { data: about } = useSiteContent<AboutContent>("about", aboutFallback);
   const { data: homeStats } = useSiteContent<HomeStatsContent>("home_stats", homeStatsFallback);
   const { data: announcements = [] } = useAnnouncements();
-  const { data: resources = [] } = useResourceDirectory();
+  const { data: resources = [], isFetching: resourcesFetching } = useResourceDirectory();
   const { data: blogs = [] } = useBlogs();
 
   const sections = [
@@ -239,7 +239,7 @@ function Home() {
                     <Download size={18} className="text-gold" />
                     <h3 className="font-serif text-lg font-semibold text-navy-deep">Recent Resources</h3>
                     <span className="ml-auto rounded-full bg-gold/15 px-2.5 py-1 text-xs font-bold text-navy-deep">
-                      {resources.length}
+                      {resourcesFetching && resources.length === 0 ? "..." : resources.length}
                     </span>
                     <ArrowRight size={15} className="text-gold opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100" />
                   </div>
@@ -249,7 +249,11 @@ function Home() {
                         <p className="text-sm font-semibold text-navy-deep">{item.title}</p>
                         <p className="text-xs text-muted-foreground mt-1">{item.course} · {item.type}</p>
                       </div>
-                    )) : <p className="text-sm text-muted-foreground">No resources uploaded yet.</p>}
+                    )) : (
+                      <p className="text-sm text-muted-foreground">
+                        {resourcesFetching ? "Loading resources..." : "No resources uploaded yet."}
+                      </p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
