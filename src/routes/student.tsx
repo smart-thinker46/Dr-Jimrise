@@ -311,7 +311,7 @@ function StudentPage() {
             </CardContent>
           </Card>
           <div className="grid sm:grid-cols-3 gap-4">
-            <StatCard label="Announcements" value={items.length} icon={Megaphone} onClick={() => setActive("announcements")} />
+            <StatCard label="Announcements" value={announcementsLoading ? "..." : items.length} icon={Megaphone} onClick={() => setActive("announcements")} />
             <StatCard label="Resources" value={files.length} icon={BookOpen} onClick={() => setActive("resources")} />
             <StatCard label="Files" value={files.filter((f) => f.file_url).length} icon={FileText} onClick={() => setActive("resources")} />
           </div>
@@ -388,6 +388,15 @@ function StudentPage() {
 
       {active === "announcements" && (
         <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-serif text-2xl font-bold text-navy-deep">Announcements</h2>
+              <p className="text-sm text-muted-foreground">Notices available to your group and general student notices.</p>
+            </div>
+            <span className="rounded-full bg-gold/15 px-3 py-1.5 text-sm font-semibold text-navy-deep">
+              {announcementsLoading ? "Loading..." : `${items.length} total`}
+            </span>
+          </div>
           <AnnouncementSpotlight
             announcements={items}
             isLoading={announcementsLoading}
@@ -1387,7 +1396,7 @@ function formatStudentDate(value: string) {
   }).format(new Date(value));
 }
 
-function StatCard({ label, value, icon: Icon, onClick }: { label: string; value: number; icon: any; onClick: () => void }) {
+function StatCard({ label, value, icon: Icon, onClick }: { label: string; value: number | string; icon: any; onClick: () => void }) {
   return (
     <button
       type="button"

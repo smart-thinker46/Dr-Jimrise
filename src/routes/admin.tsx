@@ -597,44 +597,6 @@ function AnnouncementsAdmin() {
           <p className="mt-1 text-sm text-muted-foreground">Create the first notice and choose whether it goes to everyone or selected groups.</p>
         </div>
       )}
-      {announcements.length > 0 && (
-        <div className="rounded-lg border border-border bg-secondary/20 p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-gold">Announcement audience overview</p>
-              <h4 className="font-serif text-lg font-semibold text-navy-deep">All announcements made</h4>
-            </div>
-            <Badge className="bg-navy-deep text-cream hover:bg-navy-deep">{announcements.length} total</Badge>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="py-2 pr-3 font-semibold">Announcement</th>
-                  <th className="px-3 py-2 font-semibold">Date</th>
-                  <th className="px-3 py-2 font-semibold">Audience</th>
-                  <th className="py-2 pl-3 font-semibold">Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {announcements.map((announcement: any) => (
-                  <tr key={announcement.id} className="border-b border-border/70 last:border-0">
-                    <td className="py-3 pr-3">
-                      <p className="font-semibold text-navy-deep">{announcement.title || "Untitled announcement"}</p>
-                      <p className="mt-1 line-clamp-1 max-w-xl text-xs text-muted-foreground">{announcement.body || "No message body yet."}</p>
-                    </td>
-                    <td className="px-3 py-3 text-muted-foreground">{announcement.date || "Not set"}</td>
-                    <td className="px-3 py-3">
-                      <AnnouncementAudienceBadge announcement={announcement} />
-                    </td>
-                    <td className="py-3 pl-3 text-xs text-muted-foreground">{formatDate(announcement.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
       {announcements.map((a: any) => <AnnouncementEditor key={a.id} row={a} groups={groups} onChange={invalidate} />)}
     </ListSection>
   );
@@ -668,6 +630,7 @@ function AnnouncementEditor({ row, groups, onChange }: { row: any; groups: Stude
     group_ids: row.group_ids ?? [],
   });
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     setForm({
@@ -738,7 +701,23 @@ function AnnouncementEditor({ row, groups, onChange }: { row: any; groups: Stude
   };
 
   return (
-    <div className="border rounded-lg p-4 bg-background space-y-4">
+    <div className="overflow-hidden rounded-lg border border-border bg-background">
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60"
+        aria-expanded={expanded}
+      >
+        <Megaphone size={18} className="shrink-0 text-gold" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-semibold text-navy-deep">{form.title || "Untitled announcement"}</span>
+          <span className="mt-0.5 block truncate text-xs text-muted-foreground">{form.date || "No date"} · {form.body || "No message body yet."}</span>
+        </span>
+        <div className="hidden sm:block"><AnnouncementAudienceBadge announcement={{ ...row, target_scope: form.target_scope, group_names: groups.filter((group) => selectedGroups.has(group.id)).map((group) => group.group_name) }} /></div>
+        <ChevronDown size={18} className={cn("shrink-0 text-muted-foreground transition-transform", expanded && "rotate-180")} />
+      </button>
+      {expanded && (
+      <div className="space-y-4 border-t border-border p-4">
       <div className="grid sm:grid-cols-2 gap-3">
         <div>
           <Label className="text-xs">Title</Label>
@@ -803,6 +782,8 @@ function AnnouncementEditor({ row, groups, onChange }: { row: any; groups: Stude
           </ConfirmAction>
         </div>
       </div>
+      </div>
+      )}
     </div>
   );
 }
