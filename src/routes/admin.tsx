@@ -60,6 +60,7 @@ export const Route = createFileRoute("/admin")({
 
 const NAV: DashboardNavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
+  { id: "logs", label: "Activity Logs", icon: Activity },
   {
     id: "site-content",
     label: "Site Content",
@@ -129,6 +130,7 @@ function AdminPage() {
       onSelect={setActive}
     >
       {active === "dashboard" && <AdminDashboard onSelect={setActive} />}
+      {active === "logs" && <AdminActivityLogs />}
       {active === "hero" && (
         <SiteContentEditor sectionKey="hero" fallback={heroFallback} fields={[
           { name: "name", label: "Name" }, { name: "tagline", label: "Tagline" }, { name: "role", label: "Role" },
@@ -177,6 +179,129 @@ function AdminPage() {
       {active === "blogs" && <BlogsAdmin />}
     </DashboardShell>
   );
+}
+
+type AdminActivityLog = {
+  id: string;
+  event_type: string;
+  entity_type: string;
+  entity_id: string | null;
+  message: string;
+  severity: "info" | "warning" | "error";
+  created_at: string;
+};
+
+function AdminActivityLogs() {
+  const qc = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [severity, setSeverity] = useState<"all" | AdminActivityLog["severity"]>("all");
+  const { data: logs = [], isLoading, error, refetch, isFetching } = useQuery({
+    queryKey: ["admin", "activity_logs"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("admin_activity_logs" as any)
+        .select("id,event_type,entity_type,entity_id,message,severity,created_at")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return (data ?? []) as AdminActivityLog[];
+    },
+    staleTime: 15_000,
+    retry: 1,
+  });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin:activity-logs")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "admin_activity_logs" }, () => {
+        qc.invalidateQueries({ queryKey: ["admin", "activity_logs"] });
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [qc]);
+
+  const filtered = logs.filter((item) => {
+    if (severity !== "all" && item.severity !== severity) return false;
+    const term = search.trim().toLowerCase();
+    return !term || [item.message, item.event_type, item.entity_type].some((value) => value.toLowerCase().includes(term));
+  });
+  const errorCount = logs.filter((item) => item.severity === "error").length;
+  const warningCount = logs.filter((item) => item.severity === "warning").length;
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <LogStat label="Recent activity" value={logs.length} tone="navy" />
+        <LogStat label="Warnings" value={warningCount} tone="gold" />
+        <LogStat label="Errors" value={errorCount} tone="error" />
+      </div>
+      <Card>
+        <CardContent className="space-y-4 pt-6">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h3 className="font-serif text-xl font-semibold text-navy-deep">Activity Logbook</h3>
+              <p className="text-sm text-muted-foreground">Recent content changes, account updates, and application errors. The newest 200 entries are retained here.</p>
+            </div>
+            <Button size="sm" variant="outline" disabled={isFetching} onClick={() => void refetch()}>
+              {isFetching ? "Refreshing..." : "Refresh"}
+            </Button>
+          </div>
+          <div className="grid gap-3 md:grid-cols-[1fr_180px]">
+            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search activity, content, or error..." />
+            <select value={severity} onChange={(event) => setSeverity(event.target.value as typeof severity)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+              <option value="all">All activity</option>
+              <option value="info">Information</option>
+              <option value="warning">Warnings</option>
+              <option value="error">Errors</option>
+            </select>
+          </div>
+          {error ? (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+              <p className="font-semibold text-destructive">Logs could not load</p>
+              <p className="mt-1 text-sm text-muted-foreground">{adminErrorMessage(error)}</p>
+            </div>
+          ) : isLoading ? (
+            <p className="py-8 text-sm text-muted-foreground">Loading activity logs...</p>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border bg-secondary/30 p-10 text-center">
+              <Activity className="mx-auto mb-3 text-muted-foreground/70" size={30} />
+              <p className="font-semibold text-navy-deep">No matching log entries</p>
+              <p className="mt-1 text-sm text-muted-foreground">Actions and application errors will appear here as they occur.</p>
+            </div>
+          ) : (
+            <div className="divide-y overflow-hidden rounded-lg border border-border">
+              {filtered.map((item) => (
+                <div key={item.id} className="flex gap-3 bg-background p-4">
+                  <span className={cn("mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full", logSeverityClass(item.severity))} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-navy-deep">{item.message}</p>
+                      <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{item.entity_type.replaceAll("_", " ")}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{formatDate(item.created_at)} · {item.event_type.replaceAll("_", " ")}</p>
+                  </div>
+                  <span className={cn("shrink-0 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider", logSeverityBadgeClass(item.severity))}>{item.severity}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function LogStat({ label, value, tone }: { label: string; value: number; tone: "navy" | "gold" | "error" }) {
+  const color = tone === "error" ? "text-destructive" : tone === "gold" ? "text-gold" : "text-navy-deep";
+  return <Card><CardContent className="pt-5"><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p><p className={cn("mt-1 font-serif text-3xl font-bold", color)}>{value}</p></CardContent></Card>;
+}
+
+function logSeverityClass(severity: AdminActivityLog["severity"]) {
+  return severity === "error" ? "bg-destructive" : severity === "warning" ? "bg-gold" : "bg-navy-deep";
+}
+
+function logSeverityBadgeClass(severity: AdminActivityLog["severity"]) {
+  return severity === "error" ? "bg-destructive/10 text-destructive" : severity === "warning" ? "bg-gold/15 text-navy-deep" : "bg-navy-deep/10 text-navy-deep";
 }
 
 async function compressImageFile(file: File, maxWidth: number, quality: number) {
@@ -2533,7 +2658,12 @@ function UsersAdmin({ currentUserId }: { currentUserId: string }) {
       new_status: nextStatus,
       status_reason: reason,
     });
-    if (error) toast.error("Status update failed", { description: error.message }); else { await refresh(); toast.success("Status updated", { description: `User is now ${nextStatus}.` }); }
+    if (error) toast.error("Status update failed", { description: error.message }); else {
+      await refresh();
+      toast.success(nextStatus === "active" ? "User activated" : "Status updated", {
+        description: nextStatus === "active" ? "Account access is active and the email has been confirmed." : `User is now ${nextStatus}.`,
+      });
+    }
   };
 
   const setUserGroup = async (id: string, groupId: string) => {
@@ -2579,7 +2709,10 @@ function UsersAdmin({ currentUserId }: { currentUserId: string }) {
     ));
     const failed = results.find((result) => result.error);
     if (failed?.error) return toast.error("Bulk update failed", { id: toastId, description: failed.error.message });
-    toast.success(`${selectedUsers.length} user${selectedUsers.length === 1 ? "" : "s"} updated`, { id: toastId });
+    toast.success(`${selectedUsers.length} user${selectedUsers.length === 1 ? "" : "s"} updated`, {
+      id: toastId,
+      description: nextStatus === "active" ? "Activated accounts now have confirmed emails." : undefined,
+    });
     setSelectedIds([]);
     await refresh();
   };

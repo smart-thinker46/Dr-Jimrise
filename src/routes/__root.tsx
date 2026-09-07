@@ -8,10 +8,12 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { CircleAlert, Home, RefreshCw } from "lucide-react";
 
 import appCss from "../styles.css?url";
 import jimriseIcon from "../assets/jimriseicon.png?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { recordAdminClientError } from "@/lib/admin-logs";
 import { Toaster } from "@/components/ui/sonner";
 import { defaultDescription, defaultTitle, personSchema, seoHead, siteName, websiteSchema } from "@/lib/seo";
 
@@ -42,33 +44,39 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    void recordAdminClientError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
+    <div className="flex min-h-screen items-center justify-center bg-secondary/40 px-4 py-8">
+      <div className="w-full max-w-lg overflow-hidden rounded-xl border border-border bg-background shadow-xl shadow-navy-deep/10">
+        <div className="border-b border-gold/30 bg-navy-deep px-6 py-5 text-cream">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-gold text-navy-deep"><CircleAlert size={21} /></span>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gold">Page unavailable</p>
+              <h1 className="mt-0.5 font-serif text-2xl font-bold">This page didn't load</h1>
+            </div>
+          </div>
+        </div>
+        <div className="px-6 py-6">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Something interrupted this page while it was loading. Your information is safe. Try again, or return to the main site.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
           <button
             onClick={() => {
               router.invalidate();
               reset();
             }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="inline-flex items-center justify-center rounded-md bg-gold px-4 py-2 text-sm font-semibold text-navy-deep transition-all hover:bg-gold-soft active:scale-[0.98]"
           >
-            Try again
+            <RefreshCw size={16} className="mr-2" />Try again
           </button>
-          <a
-            href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            Go home
-          </a>
+          <Link to="/" className="inline-flex items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-navy-deep transition-colors hover:bg-secondary">
+            <Home size={16} className="mr-2" />Go home
+          </Link>
+          </div>
         </div>
       </div>
     </div>
