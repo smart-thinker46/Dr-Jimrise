@@ -2556,14 +2556,29 @@ function UsersAdmin({ currentUserId }: { currentUserId: string }) {
   };
 
   const setUserGroup = async (id: string, groupId: string) => {
+    const previousUsers = qc.getQueryData<AdminUser[]>(["admin", "users"]);
+    const selectedGroup = groups.find((group) => group.id === groupId);
     const toastId = toast.loading("Updating group...");
+    qc.setQueryData<AdminUser[]>(["admin", "users"], (users) => (users ?? []).map((user) =>
+      user.id === id
+        ? { ...user, group_id: groupId === "unassigned" ? null : groupId, group_name: selectedGroup?.group_name ?? null }
+        : user,
+    ));
     const { error } = await (supabase.rpc as any)("admin_set_user_group", {
       target_user_id: id,
       target_group_id: groupId === "unassigned" ? null : groupId,
     });
-    if (error) return toast.error("Group update failed", { id: toastId, description: error.message });
+    if (error) {
+      qc.setQueryData(["admin", "users"], previousUsers);
+      return toast.error("Group update failed", { id: toastId, description: error.message });
+    }
     await refresh();
-    toast.success("Group updated", { id: toastId });
+    qc.invalidateQueries({ queryKey: ["student_profile_group", id] });
+    qc.invalidateQueries({ queryKey: ["dashboard_profile", id] });
+    qc.invalidateQueries({ queryKey: ["resources"] });
+    qc.invalidateQueries({ queryKey: ["announcements"] });
+    qc.invalidateQueries({ queryKey: ["student"] });
+    toast.success("Group updated", { id: toastId, description: selectedGroup?.group_name ?? "Student is now unassigned." });
   };
 
   const deleteUser = async (id: string, userEmail: string) => {

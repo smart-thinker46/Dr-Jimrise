@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { BookOpen, Building2, ChevronDown, Eye, EyeOff, GraduationCap, KeyRound, LogOut, Home, Mail, Pencil, User, ExternalLink, type LucideIcon } from "lucide-react";
+import { BookOpen, Building2, ChevronDown, Eye, EyeOff, GraduationCap, KeyRound, LogOut, Home, Mail, Pencil, User, Users, ExternalLink, type LucideIcon } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -328,6 +328,7 @@ export function DashboardShell({
                       {showStudentProfileFields && <ProfileRow icon={GraduationCap} label="Adm No:" value={profile?.admission_number} />}
                       <ProfileRow icon={GraduationCap} label="Education Level" value={profile?.education_level ? formatEducationLevel(profile.education_level) : ""} />
                       <ProfileRow icon={BookOpen} label="Program" value={profile?.program} />
+                      {showStudentProfileFields && <ProfileRow icon={Users} label="Student Group" value={profile?.student_groups?.group_name} fallback={profileLoading ? "Loading..." : "Not assigned yet"} />}
                     </div>
                   )}
                 </div>
@@ -432,6 +433,7 @@ type DashboardProfile = {
   education_level: string | null;
   program: string | null;
   admission_number: string | null;
+  student_groups?: { group_name: string | null } | null;
 };
 
 type DashboardProfileForm = {
@@ -464,13 +466,14 @@ const educationLevelOptions = [
 ];
 
 function useDashboardProfile(userId?: string) {
-  return useQuery({
+  const queryClient = useQueryClient();
+  const query = useQuery({
     queryKey: ["dashboard_profile", userId ?? null],
     queryFn: async () => {
       if (!userId) return null;
       const { data, error } = await supabase
         .from("student_profiles" as any)
-        .select("first_name,last_name,organization_name,education_level,program,admission_number")
+        .select("first_name,last_name,organization_name,education_level,program,admission_number,student_groups(group_name)")
         .eq("user_id", userId)
         .maybeSingle();
       if (error) throw error;
@@ -478,7 +481,24 @@ function useDashboardProfile(userId?: string) {
     },
     enabled: !!userId,
     staleTime: 30_000,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   });
+
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`dashboard-profile:${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "student_profiles", filter: `user_id=eq.${userId}` },
+        () => queryClient.invalidateQueries({ queryKey: ["dashboard_profile", userId] }),
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [queryClient, userId]);
+
+  return query;
 }
 
 function ProfileField({
