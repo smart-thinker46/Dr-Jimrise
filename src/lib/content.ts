@@ -162,8 +162,12 @@ export function useAnnouncements(scope = "public") {
       if (error) throw error;
       return (data ?? []) as Announcement[];
     },
-    initialData: [],
-    staleTime: 10_000,
+    // An empty placeholder must not be treated as a completed request.
+    // Students should fetch their allowed announcements as soon as they sign in.
+    placeholderData: [],
+    staleTime: 30_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -199,22 +203,30 @@ export function useResources(includeActionUrls = true) {
       ].join(",");
 
       if (!includeActionUrls) {
-        const [{ data: metadata }, { data: publicActions }] = await Promise.all([
+        const [{ data: metadata, error: metadataError }, { data: publicActions, error: publicActionsError }] = await Promise.all([
           supabase.from("resources").select(metadataColumns).order("sort_order", { ascending: true }),
           supabase.from("resources").select("id,file_url,link_url").eq("access_level", "public"),
         ]);
+        if (metadataError) throw metadataError;
+        if (publicActionsError) throw publicActionsError;
         const actionsById = new Map((publicActions ?? []).map((r: any) => [r.id, r]));
         return (metadata ?? []).map((r: any) => ({ ...r, ...(actionsById.get(r.id) ?? {}) }));
       }
 
       const columns = `${metadataColumns},file_url,link_url`;
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("resources")
         .select(columns)
         .order("sort_order", { ascending: true });
+      if (error) throw error;
       return data ?? [];
     },
-    initialData: [],
+    // Keep the page stable while the authorized resource request is in flight,
+    // without caching an empty list as if it came from Supabase.
+    placeholderData: [],
+    staleTime: 30_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
   });
 }
 

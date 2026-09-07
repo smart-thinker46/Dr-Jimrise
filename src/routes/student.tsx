@@ -44,21 +44,23 @@ function StudentPage() {
   const { data: role } = useUserRole(user);
   const { data: accessStatus = "active" } = useUserAccessStatus(user);
   const { data: announcements, isLoading: announcementsLoading, error: announcementsError } = useAnnouncements(user?.id ? `student:${user.id}` : "student");
-  const { data: resources } = useResources();
+  const { data: resources, isLoading: resourcesLoading, error: resourcesError, refetch: refetchResources } = useResources();
   const { data: profile } = useQuery({
     queryKey: ["student_profile_group", user?.id ?? null],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("student_profiles" as any)
         .select("first_name,last_name,group_id,student_groups(group_name)")
         .eq("user_id", user!.id)
         .maybeSingle();
+      if (error) throw error;
       return data as any;
     },
-    initialData: null,
-    staleTime: 5_000,
-    refetchInterval: 15_000,
+    placeholderData: null,
+    staleTime: 30_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
   });
   const { data: assignmentCounterTasks = [] } = useQuery({
     queryKey: ["student", "assignment_task_counter", user?.id ?? null],
@@ -102,6 +104,21 @@ function StudentPage() {
     },
     enabled: !!user,
   });
+  const { data: groupMessageCounterItems = [] } = useQuery({
+    queryKey: ["student", "group_message_counter", user?.id ?? null],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("group_messages" as any)
+        .select("id,created_at")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user,
+    staleTime: 30_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
   const [active, setActive] = useState("overview");
   const [query, setQuery] = useState("");
   const [seenAt, setSeenAt] = useState<Record<string, string>>({});
@@ -124,7 +141,15 @@ function StudentPage() {
       qc.invalidateQueries({ queryKey: ["resources"] });
       qc.invalidateQueries({ queryKey: ["resource-directory"] });
       qc.invalidateQueries({ queryKey: ["announcements"] });
+      qc.invalidateQueries({ queryKey: ["student", "assignment_task_counter", user.id] });
+      qc.invalidateQueries({ queryKey: ["student", "assignment_tasks", user.id] });
+      qc.invalidateQueries({ queryKey: ["student", "group_message_counter", user.id] });
+      qc.invalidateQueries({ queryKey: ["student", "group_messages", user.id] });
     };
+
+    // Resources are permission-sensitive. Refetch once the authenticated session
+    // is available so a previous anonymous cache can never be shown to a student.
+    refreshStudentData();
 
     const channel = supabase
       .channel(`student-profile:${user.id}`)
@@ -165,6 +190,22 @@ function StudentPage() {
         "postgres_changes",
         { event: "*", schema: "public", table: "contact_messages", filter: `sender_user_id=eq.${user.id}` },
         () => qc.invalidateQueries({ queryKey: ["student", "contact_message_counter", user.id, user.email ?? null] }),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "group_messages" },
+        () => {
+          qc.invalidateQueries({ queryKey: ["student", "group_message_counter", user.id] });
+          qc.invalidateQueries({ queryKey: ["student", "group_messages", user.id] });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "group_message_access" },
+        () => {
+          qc.invalidateQueries({ queryKey: ["student", "group_message_counter", user.id] });
+          qc.invalidateQueries({ queryKey: ["student", "group_messages", user.id] });
+        },
       )
       .subscribe();
 
@@ -208,9 +249,9 @@ function StudentPage() {
       announcements: unreadCount(items, seenAt.announcements, (item: any) => item.created_at),
       resources: unreadCount(files, seenAt.resources, (item: any) => item.created_at),
       assignments: unreadCount(assignmentEvents, seenAt.assignments, (item: any) => item.created_at),
-      messages: unreadCount(messageCounterItems, seenAt.messages, (item: any) => item.replied_at ?? item.created_at),
+      messages: unreadCount([...messageCounterItems, ...groupMessageCounterItems], seenAt.messages, (item: any) => item.replied_at ?? item.created_at),
     };
-  }, [assignmentCounterSubmissions, assignmentCounterTasks, files, items, messageCounterItems, seenAt]);
+  }, [assignmentCounterSubmissions, assignmentCounterTasks, files, groupMessageCounterItems, items, messageCounterItems, seenAt]);
 
   if (!user) return null;
 
@@ -328,10 +369,17 @@ function StudentPage() {
             </CardHeader>
             <CardContent>
               <div className="grid sm:grid-cols-2 gap-3">
+                {resourcesLoading ? <p className="text-sm text-muted-foreground">Loading your available resources...</p> : null}
+                {resourcesError ? (
+                  <div className="sm:col-span-2 flex flex-wrap items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                    <p className="text-sm text-destructive">Resources could not load.</p>
+                    <Button size="sm" variant="outline" onClick={(event) => { event.stopPropagation(); void refetchResources(); }}>Try again</Button>
+                  </div>
+                ) : null}
                 {files.slice(0, 4).map((r) => (
                   <ResourceCard key={r.id} r={r} />
                 ))}
-                {files.length === 0 && <p className="text-sm text-muted-foreground italic">No resources yet.</p>}
+                {!resourcesLoading && !resourcesError && files.length === 0 && <p className="text-sm text-muted-foreground italic">No resources have been assigned to you yet.</p>}
               </div>
             </CardContent>
           </Card>
@@ -388,8 +436,17 @@ function StudentPage() {
             />
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {resourcesLoading ? <p className="text-sm text-muted-foreground col-span-full">Loading your available resources...</p> : null}
+            {resourcesError ? (
+              <Card className="col-span-full border-destructive/30">
+                <CardContent className="flex flex-wrap items-center gap-3 pt-6">
+                  <p className="text-sm text-destructive">Resources could not load. Please try again.</p>
+                  <Button size="sm" variant="outline" onClick={() => void refetchResources()}>Try again</Button>
+                </CardContent>
+              </Card>
+            ) : null}
             {filteredFiles.map((r) => <ResourceCard key={r.id} r={r} />)}
-            {filteredFiles.length === 0 && <p className="text-sm text-muted-foreground italic col-span-full">No resources match your search.</p>}
+            {!resourcesLoading && !resourcesError && filteredFiles.length === 0 && <p className="text-sm text-muted-foreground italic col-span-full">No resources match your search.</p>}
           </div>
         </div>
       )}
@@ -522,6 +579,14 @@ type StudentContactMessage = {
   status: "unread" | "read" | "replied";
   admin_reply: string | null;
   replied_at: string | null;
+  created_at: string;
+};
+
+type GroupMessage = {
+  id: string;
+  subject: string;
+  body: string;
+  target_scope: "all" | "group";
   created_at: string;
 };
 
@@ -1030,6 +1095,21 @@ function StudentMessagePanel({ userId, userEmail, fullName }: { userId: string; 
     },
     enabled: !!userId,
   });
+  const { data: groupMessages = [], isLoading: groupMessagesLoading, error: groupMessagesError } = useQuery({
+    queryKey: ["student", "group_messages", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("group_messages" as any)
+        .select("id,subject,body,target_scope,created_at")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as GroupMessage[];
+    },
+    enabled: !!userId,
+    staleTime: 30_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
 
   useEffect(() => {
     if (!userId) return;
@@ -1181,6 +1261,40 @@ function StudentMessagePanel({ userId, userEmail, fullName }: { userId: string; 
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-gold/30">
+        <CardContent className="pt-6">
+          <div className="mb-4 flex items-center gap-2">
+            <Megaphone size={18} className="text-gold" />
+            <div>
+              <h3 className="font-serif text-xl font-semibold text-navy-deep">Messages for Your Group</h3>
+              <p className="text-sm text-muted-foreground">Notices sent to your current group by the administrator.</p>
+            </div>
+          </div>
+          {groupMessagesError ? (
+            <p className="text-sm text-destructive">Group messages could not load. Please refresh the page.</p>
+          ) : groupMessagesLoading ? (
+            <p className="text-sm text-muted-foreground">Loading group messages...</p>
+          ) : groupMessages.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border bg-secondary/30 p-4 text-sm text-muted-foreground">No messages have been sent to your group yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {groupMessages.map((item) => (
+                <div key={item.id} className="rounded-lg border border-border bg-background p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-semibold text-navy-deep">{item.subject}</p>
+                    <span className="rounded-full bg-navy-deep/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-navy-deep">
+                      {item.target_scope === "group" ? "Your group" : "All students"}
+                    </span>
+                  </div>
+                  <p className="mt-2 whitespace-pre-line text-sm text-foreground/75">{item.body}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{formatStudentDate(item.created_at)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="pt-6">

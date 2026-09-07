@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +24,7 @@ import {
   Database, LayoutDashboard, BarChart3, Bell, FileText, FileUp, GraduationCap, Activity, AlignLeft, AlignCenter, AlignRight,
   AlignJustify, Undo2, Redo2, Eraser, Minus, Table2, Heading1, Heading2, Pilcrow, Highlighter, MessageSquare, PhoneCall, ChevronDown,
   Maximize2, Captions, PanelLeft, PanelRight, Link2, ClipboardList, Download, ExternalLink,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -1688,6 +1690,7 @@ function ContactMessagesAdmin() {
 
   return (
     <div className="space-y-5">
+      <GroupMessageComposer onSent={refresh} />
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-5">
@@ -1754,6 +1757,107 @@ function ContactMessagesAdmin() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function GroupMessageComposer({ onSent }: { onSent: () => void }) {
+  const qc = useQueryClient();
+  const { data: groups = [], isLoading: groupsLoading } = useStudentGroups();
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [scope, setScope] = useState<"all" | "group">("all");
+  const [groupIds, setGroupIds] = useState<string[]>([]);
+  const [sending, setSending] = useState(false);
+
+  const toggleGroup = (groupId: string, checked: boolean) => {
+    setGroupIds((ids) => checked ? Array.from(new Set([...ids, groupId])) : ids.filter((id) => id !== groupId));
+  };
+
+  const send = async () => {
+    if (!subject.trim()) return toast.error("Message subject is required.");
+    if (!body.trim()) return toast.error("Message body is required.");
+    if (scope === "group" && groupIds.length === 0) return toast.error("Choose at least one student group.");
+
+    setSending(true);
+    const toastId = toast.loading("Sending group message...");
+    try {
+      const { data: created, error } = await supabase
+        .from("group_messages" as any)
+        .insert({ subject: subject.trim(), body: body.trim(), target_scope: scope })
+        .select("id")
+        .single();
+      if (error) throw error;
+
+      if (scope === "group") {
+        const { error: accessError } = await supabase
+          .from("group_message_access" as any)
+          .insert(groupIds.map((groupId) => ({ message_id: created.id, group_id: groupId })));
+        if (accessError) throw accessError;
+      }
+
+      setSubject("");
+      setBody("");
+      setScope("all");
+      setGroupIds([]);
+      qc.invalidateQueries({ queryKey: ["student", "group_message_counter"] });
+      onSent();
+      toast.success("Message sent", { id: toastId, description: scope === "all" ? "Visible to all active students." : "Visible to the selected student groups." });
+    } catch (error: any) {
+      toast.error("Message could not be sent", { id: toastId, description: error?.message ?? "Please try again." });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Card className="border-gold/30">
+      <CardContent className="pt-6 space-y-4">
+        <div>
+          <h3 className="font-serif text-xl font-semibold text-navy-deep">Send Student Message</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Send a notice to all active students or only the groups you select.</p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="group-message-subject">Subject</Label>
+            <Input id="group-message-subject" value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={160} placeholder="e.g. Assignment deadline reminder" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="group-message-audience">Audience</Label>
+            <select
+              id="group-message-audience"
+              value={scope}
+              onChange={(event) => { setScope(event.target.value as "all" | "group"); if (event.target.value === "all") setGroupIds([]); }}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-gold/40"
+            >
+              <option value="all">All active students</option>
+              <option value="group">Specific groups</option>
+            </select>
+          </div>
+        </div>
+        {scope === "group" && (
+          <div className="rounded-lg border border-border bg-secondary/30 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select groups</p>
+            {groupsLoading ? <p className="text-sm text-muted-foreground">Loading groups...</p> : (
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {groups.map((group) => (
+                  <label key={group.id} className="flex cursor-pointer items-center gap-2 rounded-md bg-background px-2.5 py-2 text-sm text-navy-deep">
+                    <Checkbox checked={groupIds.includes(group.id)} onCheckedChange={(checked) => toggleGroup(group.id, checked === true)} />
+                    <span>{group.group_name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        <div className="space-y-2">
+          <Label htmlFor="group-message-body">Message</Label>
+          <Textarea id="group-message-body" value={body} onChange={(event) => setBody(event.target.value)} maxLength={5000} rows={4} placeholder="Write the message students should receive..." />
+        </div>
+        <Button onClick={send} disabled={sending} className="bg-navy-deep text-cream hover:bg-navy">
+          <Send size={16} className="mr-2" />{sending ? "Sending..." : "Send Message"}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
