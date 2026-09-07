@@ -197,10 +197,6 @@ function StudentPage() {
     );
   }, [files, query]);
 
-  if (!user) return null;
-
-  const activeMeta = NAV.find((n) => n.id === active);
-
   const sidebarCounters = useMemo(() => {
     const assignmentEvents = [
       ...assignmentCounterTasks.map((task: any) => ({ created_at: task.created_at ?? task.updated_at })),
@@ -215,6 +211,10 @@ function StudentPage() {
       messages: unreadCount(messageCounterItems, seenAt.messages, (item: any) => item.replied_at ?? item.created_at),
     };
   }, [assignmentCounterSubmissions, assignmentCounterTasks, files, items, messageCounterItems, seenAt]);
+
+  if (!user) return null;
+
+  const activeMeta = NAV.find((n) => n.id === active);
 
   const studentNav: DashboardNavItem[] = NAV.map((item) => ({
     ...item,
