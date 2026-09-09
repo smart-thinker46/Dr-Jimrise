@@ -1,5 +1,9 @@
--- Activating an account from the admin dashboard also confirms its email.
--- This is intentionally limited to the existing admin-only status function.
+-- Approval is controlled by app_user_status. Email verification is disabled
+-- in Supabase Auth for this project, so activating a student must not mutate
+-- auth.users or require a service-role key.
+drop trigger if exists confirm_auth_email_after_activation on public.app_user_status;
+drop function if exists public.confirm_auth_email_for_active_user();
+
 create or replace function public.admin_set_user_status(
   target_user_id uuid,
   new_status text,
@@ -8,7 +12,7 @@ create or replace function public.admin_set_user_status(
 returns void
 language plpgsql
 security definer
-set search_path = public, auth
+set search_path = public
 as $$
 begin
   if not public.has_role(auth.uid(), 'admin') then
@@ -33,27 +37,8 @@ begin
   set status = excluded.status,
       reason = excluded.reason,
       updated_at = now();
-
-  if new_status = 'active' then
-    update auth.users
-    set email_confirmed_at = coalesce(email_confirmed_at, now()),
-        updated_at = now()
-    where id = target_user_id;
-  end if;
 end;
 $$;
 
 grant execute on function public.admin_set_user_status(uuid, text, text) to authenticated;
-
--- Repair accounts that were activated before this migration was installed.
-update auth.users as au
-set email_confirmed_at = coalesce(au.email_confirmed_at, now()),
-    updated_at = now()
-where exists (
-  select 1
-  from public.app_user_status as aus
-  where aus.user_id = au.id
-    and aus.status = 'active'
-);
-
 notify pgrst, 'reload schema';

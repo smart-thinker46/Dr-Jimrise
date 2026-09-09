@@ -227,6 +227,7 @@ function AdminActivityLogs() {
   });
   const errorCount = logs.filter((item) => item.severity === "error").length;
   const warningCount = logs.filter((item) => item.severity === "warning").length;
+  const logsTableMissing = error instanceof Error && /admin_activity_logs.*schema cache|relation .*admin_activity_logs.* does not exist/i.test(error.message);
 
   return (
     <div className="space-y-5">
@@ -257,8 +258,12 @@ function AdminActivityLogs() {
           </div>
           {error ? (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-              <p className="font-semibold text-destructive">Logs could not load</p>
-              <p className="mt-1 text-sm text-muted-foreground">{adminErrorMessage(error)}</p>
+              <p className="font-semibold text-destructive">{logsTableMissing ? "Activity logs are being set up" : "Logs could not load"}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {logsTableMissing
+                  ? "The activity-log database migration has not been applied yet. Apply the latest Supabase migrations, then refresh this page."
+                  : adminErrorMessage(error)}
+              </p>
             </div>
           ) : isLoading ? (
             <p className="py-8 text-sm text-muted-foreground">Loading activity logs...</p>
@@ -546,6 +551,7 @@ function SiteContentEditor<T extends Record<string, unknown>>({
   });
   const [form, setForm] = useState<Record<string, unknown>>({});
   const [uploading, setUploading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   useEffect(() => { if (data) setForm(data as Record<string, unknown>); }, [data]);
 
   const save = async () => {
@@ -589,8 +595,28 @@ function SiteContentEditor<T extends Record<string, unknown>>({
 
   if (isLoading) return <p className="py-10 text-muted-foreground">Loading…</p>;
 
+  const sectionLabel: Record<string, string> = {
+    hero: "Hero Content",
+    home_stats: "Home Statistics",
+    about: "About Page",
+    contact: "Contact Details",
+  };
+
   return (
-    <Card><CardContent className="pt-6 space-y-4">
+    <Card className="overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-3 p-4 text-left transition-colors hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60"
+      >
+        <span>
+          <span className="block font-serif text-lg font-semibold text-navy-deep">{sectionLabel[sectionKey] ?? sectionKey.replaceAll("_", " ")}</span>
+          <span className="mt-1 block text-xs text-muted-foreground">{expanded ? "Editing content" : "Click to open and edit"}</span>
+        </span>
+        <ChevronDown size={18} className={cn("shrink-0 text-muted-foreground transition-transform", expanded && "rotate-180")} />
+      </button>
+      {expanded && <CardContent className="space-y-4 border-t pt-6">
       {fields.map((f) => (
         <div key={f.name}>
           <Label>{f.label}</Label>
@@ -629,7 +655,8 @@ function SiteContentEditor<T extends Record<string, unknown>>({
         </div>
       )}
       <Button onClick={save} className="bg-navy-deep hover:bg-navy text-cream"><Save size={16} className="mr-2" />Save</Button>
-    </CardContent></Card>
+      </CardContent>}
+    </Card>
   );
 }
 
@@ -1101,6 +1128,7 @@ function SupervisionAdmin() {
     }>
       {(data ?? []).map((s: any) => (
         <RowEditor key={s.id} table="supervision" row={s} onChange={invalidate}
+          collapsible
           fields={[
             { name: "name", label: "Name" }, { name: "title", label: "Thesis title" },
             { name: "school", label: "School" }, { name: "level", label: "Level (phd/msc_completed/msc_ongoing)" },
@@ -1732,6 +1760,16 @@ type ContactMessage = {
   replied_at?: string | null;
   replied_by?: string | null;
   created_at: string;
+  replies: MessageReply[];
+};
+
+type MessageReply = {
+  id: string;
+  contact_message_id: string;
+  sender_user_id: string | null;
+  sender_role: "student" | "admin";
+  body: string;
+  created_at: string;
 };
 
 function ContactMessagesAdmin() {
@@ -1741,12 +1779,28 @@ function ContactMessagesAdmin() {
   const { data = [], isLoading } = useQuery({
     queryKey: ["admin", "contact_messages"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const [{ data, error }, { data: replies, error: repliesError }] = await Promise.all([
+        supabase
         .from("contact_messages" as any)
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false }),
+        supabase
+          .from("contact_message_replies" as any)
+          .select("id,contact_message_id,sender_user_id,sender_role,body,created_at")
+          .order("created_at", { ascending: true }),
+      ]);
       if (error) throw error;
-      return (data ?? []) as ContactMessage[];
+      if (repliesError) throw repliesError;
+      const repliesByMessage = new Map<string, MessageReply[]>();
+      for (const reply of (replies ?? []) as MessageReply[]) {
+        const current = repliesByMessage.get(reply.contact_message_id) ?? [];
+        current.push(reply);
+        repliesByMessage.set(reply.contact_message_id, current);
+      }
+      return ((data ?? []) as ContactMessage[]).map((item) => ({
+        ...item,
+        replies: repliesByMessage.get(item.id) ?? [],
+      }));
     },
   });
 
@@ -1756,6 +1810,9 @@ function ContactMessagesAdmin() {
       .on("postgres_changes", { event: "*", schema: "public", table: "contact_messages" }, () => {
         qc.invalidateQueries({ queryKey: ["admin", "contact_messages"] });
         qc.invalidateQueries({ queryKey: ["admin", "dashboard"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "contact_message_replies" }, () => {
+        qc.invalidateQueries({ queryKey: ["admin", "contact_messages"] });
       })
       .subscribe();
     return () => {
@@ -1989,15 +2046,22 @@ function AdminMessageCard({
     if (!reply.trim()) return toast.error("Reply message is required.");
     setSaving(true);
     const { data: sessionData } = await supabase.auth.getSession();
-    const { error } = await supabase
-      .from("contact_messages" as any)
-      .update({
+    const { error: replyError } = await supabase.from("contact_message_replies" as any).insert({
+      contact_message_id: item.id,
+      sender_user_id: sessionData.session?.user.id ?? null,
+      sender_role: "admin",
+      body: reply.trim(),
+    });
+    if (replyError) {
+      setSaving(false);
+      return toast.error("Reply could not be saved", { description: replyError.message });
+    }
+    const { error } = await supabase.from("contact_messages" as any).update({
         admin_reply: reply.trim(),
         replied_at: new Date().toISOString(),
         replied_by: sessionData.session?.user.id ?? null,
         status: "replied",
-      })
-      .eq("id", item.id);
+    }).eq("id", item.id);
     setSaving(false);
     if (error) return toast.error("Reply could not be saved", { description: error.message });
     toast.success("Reply saved", { description: item.sender_user_id ? "The student can now see it in their dashboard." : "Reply saved on this message." });
@@ -2021,7 +2085,20 @@ function AdminMessageCard({
             <span className="text-xs text-muted-foreground">{formatDate(item.created_at)}</span>
           </div>
           <p className="mt-1 text-sm font-medium text-navy-deep">{formatMessageSubject(item.subject)}</p>
-          <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-foreground/75">{item.message}</p>
+          <div className="mt-3 space-y-2 rounded-lg bg-secondary/30 p-3">
+            <div className="max-w-[90%] rounded-2xl rounded-tl-sm bg-background px-3 py-2 shadow-sm">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{item.name}</p>
+              <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-foreground/80">{item.message}</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">{formatDate(item.created_at)}</p>
+            </div>
+            {item.replies.map((replyItem) => (
+              <div key={replyItem.id} className={cn("max-w-[90%] rounded-2xl px-3 py-2 shadow-sm", replyItem.sender_role === "admin" ? "ml-auto rounded-tr-sm bg-gold/20" : "rounded-tl-sm bg-background")}>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{replyItem.sender_role === "admin" ? "Admin" : item.name}</p>
+                <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-foreground/80">{replyItem.body}</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">{formatDate(replyItem.created_at)}</p>
+              </div>
+            ))}
+          </div>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <a href={`mailto:${item.email}`} className="inline-flex items-center gap-1 hover:text-gold">
               <Mail size={13} /> {item.email}
@@ -2661,7 +2738,7 @@ function UsersAdmin({ currentUserId }: { currentUserId: string }) {
     if (error) toast.error("Status update failed", { description: error.message }); else {
       await refresh();
       toast.success(nextStatus === "active" ? "User activated" : "Status updated", {
-        description: nextStatus === "active" ? "Account access is active and the email has been confirmed." : `User is now ${nextStatus}.`,
+        description: nextStatus === "active" ? "Account access is now active." : `User is now ${nextStatus}.`,
       });
     }
   };
@@ -2711,7 +2788,7 @@ function UsersAdmin({ currentUserId }: { currentUserId: string }) {
     if (failed?.error) return toast.error("Bulk update failed", { id: toastId, description: failed.error.message });
     toast.success(`${selectedUsers.length} user${selectedUsers.length === 1 ? "" : "s"} updated`, {
       id: toastId,
-      description: nextStatus === "active" ? "Activated accounts now have confirmed emails." : undefined,
+      description: nextStatus === "active" ? "Activated accounts are ready to sign in." : undefined,
     });
     setSelectedIds([]);
     await refresh();
@@ -4144,10 +4221,11 @@ class SectionErrorBoundary extends Component<
 }
 
 function RowEditor({
-  table, row, fields, onChange, fileField, fileBucket,
-}: { table: string; row: any; fields: RowField[]; onChange: () => void; fileField?: string; fileBucket?: string }) {
+  table, row, fields, onChange, fileField, fileBucket, collapsible = false,
+}: { table: string; row: any; fields: RowField[]; onChange: () => void; fileField?: string; fileBucket?: string; collapsible?: boolean }) {
   const [form, setForm] = useState<any>(row);
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(!collapsible);
   useEffect(() => setForm(row), [row]);
 
   const save = async () => {
@@ -4178,8 +4256,26 @@ function RowEditor({
   };
 
   return (
-    <div className="border rounded-lg p-4 bg-background space-y-3">
-      <div className="grid sm:grid-cols-2 gap-3">
+    <div className="overflow-hidden rounded-lg border bg-background">
+      {collapsible && (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+          className="flex w-full items-center justify-between gap-3 p-4 text-left transition-colors hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60"
+        >
+          <span className="min-w-0">
+            <span className="block truncate font-semibold text-navy-deep">{row.name || "Unnamed student"}</span>
+            <span className="mt-1 block truncate text-sm text-muted-foreground">{row.title || "Thesis title not added"}</span>
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className="hidden rounded-full bg-gold/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-navy-deep sm:inline-flex">{String(row.level ?? "").replaceAll("_", " ") || "Supervision"}</span>
+            <ChevronDown size={18} className={cn("text-muted-foreground transition-transform", expanded && "rotate-180")} />
+          </span>
+        </button>
+      )}
+      {expanded && <div className={cn("space-y-3", collapsible ? "border-t p-4" : "p-4")}>
+      <div className="grid gap-3 sm:grid-cols-2">
         {fields.map((f) => (
           <div key={f.name} className={f.textarea ? "sm:col-span-2" : ""}>
             <Label className="text-xs">{f.label}</Label>
@@ -4211,6 +4307,7 @@ function RowEditor({
           <Button size="sm" variant="destructive"><Trash2 size={14} className="mr-1" />Delete</Button>
         </ConfirmAction>
       </div>
+      </div>}
     </div>
   );
 }

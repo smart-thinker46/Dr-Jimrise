@@ -589,6 +589,16 @@ type StudentContactMessage = {
   admin_reply: string | null;
   replied_at: string | null;
   created_at: string;
+  replies: StudentMessageReply[];
+};
+
+type StudentMessageReply = {
+  id: string;
+  contact_message_id: string;
+  sender_user_id: string | null;
+  sender_role: "student" | "admin";
+  body: string;
+  created_at: string;
 };
 
 type GroupMessage = {
@@ -1086,6 +1096,8 @@ function StudentMessagePanel({ userId, userEmail, fullName }: { userId: string; 
   const [phone, setPhone] = useState("");
   const [subject, setSubject] = useState("student");
   const [message, setMessage] = useState("");
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const { data: messages = [], isLoading, error: messagesError } = useQuery({
     queryKey: ["student", "contact_messages", userId, userEmail],
@@ -1094,13 +1106,29 @@ function StudentMessagePanel({ userId, userEmail, fullName }: { userId: string; 
       const visibilityFilter = normalizedEmail
         ? `sender_user_id.eq.${userId},email.ilike.${normalizedEmail}`
         : `sender_user_id.eq.${userId}`;
-      const { data, error } = await supabase
-        .from("contact_messages" as any)
-        .select("id,name,email,phone,subject,message,status,admin_reply,replied_at,created_at")
-        .or(visibilityFilter)
-        .order("created_at", { ascending: false });
+      const [{ data, error }, { data: replies, error: repliesError }] = await Promise.all([
+        supabase
+          .from("contact_messages" as any)
+          .select("id,name,email,phone,subject,message,status,admin_reply,replied_at,created_at")
+          .or(visibilityFilter)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("contact_message_replies" as any)
+          .select("id,contact_message_id,sender_user_id,sender_role,body,created_at")
+          .order("created_at", { ascending: true }),
+      ]);
       if (error) throw error;
-      return (data ?? []) as StudentContactMessage[];
+      if (repliesError) throw repliesError;
+      const repliesByMessage = new Map<string, StudentMessageReply[]>();
+      for (const reply of (replies ?? []) as StudentMessageReply[]) {
+        const current = repliesByMessage.get(reply.contact_message_id) ?? [];
+        current.push(reply);
+        repliesByMessage.set(reply.contact_message_id, current);
+      }
+      return ((data ?? []) as StudentContactMessage[]).map((item) => ({
+        ...item,
+        replies: repliesByMessage.get(item.id) ?? [],
+      }));
     },
     enabled: !!userId,
   });
@@ -1127,6 +1155,11 @@ function StudentMessagePanel({ userId, userEmail, fullName }: { userId: string; 
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "contact_messages", filter: `sender_user_id=eq.${userId}` },
+        () => qc.invalidateQueries({ queryKey: ["student", "contact_messages", userId, userEmail] }),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "contact_message_replies" },
         () => qc.invalidateQueries({ queryKey: ["student", "contact_messages", userId, userEmail] }),
       )
       .subscribe();
@@ -1184,6 +1217,23 @@ function StudentMessagePanel({ userId, userEmail, fullName }: { userId: string; 
     }
 
     toast.success("Message deleted", { id: toastId });
+    qc.invalidateQueries({ queryKey: ["student", "contact_messages", userId, userEmail] });
+  };
+
+  const sendReply = async (item: StudentContactMessage) => {
+    const body = (replyDrafts[item.id] ?? "").trim();
+    if (!body) return toast.error("Reply message is required.");
+    setReplyingTo(item.id);
+    const { error } = await supabase.from("contact_message_replies" as any).insert({
+      contact_message_id: item.id,
+      sender_user_id: userId,
+      sender_role: "student",
+      body,
+    });
+    setReplyingTo(null);
+    if (error) return toast.error("Reply could not be sent", { description: error.message });
+    setReplyDrafts((drafts) => ({ ...drafts, [item.id]: "" }));
+    toast.success("Reply sent");
     qc.invalidateQueries({ queryKey: ["student", "contact_messages", userId, userEmail] });
   };
 
@@ -1355,18 +1405,32 @@ function StudentMessagePanel({ userId, userEmail, fullName }: { userId: string; 
                       </ConfirmAction>
                     </div>
                   </div>
-                  <div className="mt-3 rounded-lg bg-secondary/40 p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Your message</p>
-                    <p className="mt-1 whitespace-pre-line text-sm text-foreground/75">{item.message}</p>
-                  </div>
-                  {item.admin_reply ? (
-                    <div className="mt-3 rounded-lg border border-gold/30 bg-gold/5 p-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gold">
-                        Admin reply {item.replied_at ? `- ${formatStudentDate(item.replied_at)}` : ""}
-                      </p>
-                      <p className="mt-1 whitespace-pre-line text-sm text-navy-deep">{item.admin_reply}</p>
+                  <div className="mt-3 space-y-2 rounded-lg bg-secondary/30 p-3">
+                    <div className="max-w-[90%] rounded-2xl rounded-tl-sm bg-background px-3 py-2 shadow-sm">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">You</p>
+                      <p className="mt-1 whitespace-pre-line text-sm text-foreground/80">{item.message}</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">{formatStudentDate(item.created_at)}</p>
                     </div>
-                  ) : null}
+                    {item.replies.map((replyItem) => (
+                      <div key={replyItem.id} className={cn("max-w-[90%] rounded-2xl px-3 py-2 shadow-sm", replyItem.sender_role === "admin" ? "ml-auto rounded-tr-sm bg-gold/20" : "rounded-tl-sm bg-background")}>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{replyItem.sender_role === "admin" ? "Admin" : "You"}</p>
+                        <p className="mt-1 whitespace-pre-line text-sm text-foreground/80">{replyItem.body}</p>
+                        <p className="mt-1 text-[10px] text-muted-foreground">{formatStudentDate(replyItem.created_at)}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <Input
+                      value={replyDrafts[item.id] ?? ""}
+                      onChange={(event) => setReplyDrafts((drafts) => ({ ...drafts, [item.id]: event.target.value }))}
+                      placeholder="Reply to admin..."
+                      maxLength={2000}
+                      onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendReply(item); } }}
+                    />
+                    <Button type="button" onClick={() => void sendReply(item)} disabled={replyingTo === item.id} className="shrink-0 bg-navy-deep text-cream hover:bg-navy">
+                      {replyingTo === item.id ? "Sending..." : "Reply"}
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

@@ -1,5 +1,30 @@
--- Activating an account from the admin dashboard also confirms its email.
--- This is intentionally limited to the existing admin-only status function.
+-- Keep Supabase Auth confirmation synchronized with admin approval.
+-- This runs inside Postgres as a security-definer function; no service-role
+-- key is exposed to the browser or required by the dashboard.
+create or replace function public.confirm_auth_email_for_active_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+begin
+  if new.status = 'active' then
+    update auth.users
+    set email_confirmed_at = coalesce(email_confirmed_at, now()),
+        updated_at = now()
+    where id = new.user_id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists confirm_auth_email_after_activation on public.app_user_status;
+create trigger confirm_auth_email_after_activation
+after insert or update of status on public.app_user_status
+for each row execute function public.confirm_auth_email_for_active_user();
+
+-- Ensure the approval RPC also confirms email when the trigger is bypassed or
+-- when a status is written by another trusted database operation.
 create or replace function public.admin_set_user_status(
   target_user_id uuid,
   new_status text,
@@ -45,7 +70,7 @@ $$;
 
 grant execute on function public.admin_set_user_status(uuid, text, text) to authenticated;
 
--- Repair accounts that were activated before this migration was installed.
+-- Repair students who are already active but still marked unconfirmed.
 update auth.users as au
 set email_confirmed_at = coalesce(au.email_confirmed_at, now()),
     updated_at = now()
