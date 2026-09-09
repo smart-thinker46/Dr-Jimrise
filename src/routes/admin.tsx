@@ -1678,6 +1678,7 @@ function GroupsAdmin() {
 function GroupCard({ group, students, onChange }: { group: StudentGroup; students: AdminUser[]; onChange: () => void }) {
   const [name, setName] = useState(group.group_name);
   const [description, setDescription] = useState(group.description);
+  const [expanded, setExpanded] = useState(false);
   useEffect(() => {
     setName(group.group_name);
     setDescription(group.description);
@@ -1701,8 +1702,20 @@ function GroupCard({ group, students, onChange }: { group: StudentGroup; student
   };
 
   return (
-    <Card>
-      <CardContent className="pt-6 space-y-4">
+    <Card className="overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-3 p-4 text-left transition-colors hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60"
+      >
+        <span className="min-w-0">
+          <span className="block truncate font-serif text-lg font-semibold text-navy-deep">{group.group_name}</span>
+          <span className="mt-1 block text-sm text-muted-foreground">{students.length} student{students.length === 1 ? "" : "s"}</span>
+        </span>
+        <ChevronDown size={18} className={cn("shrink-0 text-muted-foreground transition-transform", expanded && "rotate-180")} />
+      </button>
+      {expanded && <CardContent className="space-y-4 border-t pt-6">
         <div className="grid gap-3">
           <div>
             <Label>Group Name</Label>
@@ -1742,7 +1755,7 @@ function GroupCard({ group, students, onChange }: { group: StudentGroup; student
             </Button>
           </ConfirmAction>
         </div>
-      </CardContent>
+      </CardContent>}
     </Card>
   );
 }
