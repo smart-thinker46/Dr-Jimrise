@@ -110,6 +110,7 @@ function ForgotPasswordForm() {
 }
 
 function SignUpForm() {
+  const navigate = useNavigate();
   const { data: groups = [], isLoading: groupsLoading, error: groupsError } = useStudentGroups();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -140,7 +141,13 @@ function SignUpForm() {
     });
     setBusy(false);
     if (error) toast.error(error.message);
-    else toast.success("Account created. Your account is pending admin approval.");
+    else {
+      // Supabase may create a session immediately when email confirmation is disabled.
+      // Sign out so a pending student must wait for approval and then sign in normally.
+      await supabase.auth.signOut();
+      toast.success("Account created. Your account is pending admin approval. Please sign in after approval.");
+      navigate({ to: "/auth", replace: true });
+    }
   };
   return (
     <form onSubmit={submit} className="space-y-4 pt-4">

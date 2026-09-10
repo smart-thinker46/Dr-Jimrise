@@ -23,7 +23,7 @@ import {
   Bold, Italic, Underline, Link as LinkIcon, Image, MousePointerClick, Palette, List, ListOrdered, Quote,
   Database, LayoutDashboard, BarChart3, Bell, FileText, FileUp, GraduationCap, Activity, AlignLeft, AlignCenter, AlignRight,
   AlignJustify, Undo2, Redo2, Eraser, Minus, Table2, Heading1, Heading2, Pilcrow, Highlighter, MessageSquare, PhoneCall, ChevronDown,
-  Maximize2, Captions, PanelLeft, PanelRight, Link2, ClipboardList, Download, ExternalLink,
+  Maximize2, Captions, PanelLeft, PanelRight, Link2, ClipboardList, Download, ExternalLink, KeyRound,
   Send,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -2848,6 +2848,15 @@ function UsersAdmin({ currentUserId }: { currentUserId: string }) {
     if (error) toast.error("Delete failed", { description: error.message }); else { await refresh(); toast.success("User deleted", { description: userEmail }); }
   };
 
+  const resetUserPassword = async (id: string, newPassword: string) => {
+    const { error } = await (supabase.rpc as any)("admin_reset_user_password", {
+      target_user_id: id,
+      new_password: newPassword,
+    });
+    if (error) return toast.error("Password reset failed", { description: error.message });
+    toast.success("Password reset", { description: "The user can now sign in with the new password." });
+  };
+
   const bulkSetStatus = async (nextStatus: "active" | "suspended" | "blocked") => {
     if (selectedUsers.length === 0) return toast.error("Select at least one user.");
     const toastId = toast.loading("Updating selected users...");
@@ -3057,6 +3066,7 @@ function UsersAdmin({ currentUserId }: { currentUserId: string }) {
                   setUserStatus={setUserStatus}
                   setUserGroup={setUserGroup}
                   deleteUser={deleteUser}
+                  resetUserPassword={resetUserPassword}
                 />
               ))}
                 </tbody>
@@ -3081,6 +3091,7 @@ function UserTableRows({
   setUserStatus,
   setUserGroup,
   deleteUser,
+  resetUserPassword,
 }: {
   user: AdminUser;
   groups: StudentGroup[];
@@ -3093,9 +3104,26 @@ function UserTableRows({
   setUserStatus: (id: string, nextStatus: string, reason?: string) => void | Promise<void>;
   setUserGroup: (id: string, groupId: string) => void | Promise<void>;
   deleteUser: (id: string, userEmail: string) => void | Promise<void>;
+  resetUserPassword: (id: string, newPassword: string) => void | Promise<void>;
 }) {
   const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ") || user.email || "Unnamed user";
   const isCurrentUser = user.id === currentUserId;
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+
+  const submitPasswordReset = async () => {
+    if (newPassword.length < 6) return toast.error("Password must be at least 6 characters.");
+    if (newPassword !== confirmPassword) return toast.error("Passwords do not match.");
+    setPasswordBusy(true);
+    try {
+      await resetUserPassword(user.id, newPassword);
+      setNewPassword("");
+      setConfirmPassword("");
+    } finally {
+      setPasswordBusy(false);
+    }
+  };
 
   return (
     <>
@@ -3240,6 +3268,38 @@ function UserTableRows({
                       <Trash2 size={14} className="mr-1" />Delete
                     </Button>
                   </ConfirmAction>
+                </div>
+                <div className="mt-4 border-t border-border pt-4">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Reset Password</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Input
+                      type="password"
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      placeholder="New password"
+                      minLength={6}
+                      autoComplete="new-password"
+                    />
+                    <Input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      placeholder="Confirm password"
+                      minLength={6}
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="mt-2"
+                    disabled={passwordBusy || !newPassword || !confirmPassword}
+                    onClick={submitPasswordReset}
+                  >
+                    <KeyRound size={14} className="mr-1" />
+                    {passwordBusy ? "Resetting..." : "Reset password"}
+                  </Button>
                 </div>
               </div>
             </div>
