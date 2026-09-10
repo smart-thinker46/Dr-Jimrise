@@ -2201,6 +2201,7 @@ type AssignmentTaskAdmin = {
   due_date: string | null;
   file_url: string | null;
   file_name: string | null;
+  source_type?: "file" | "link" | null;
   target_scope: "all" | "group" | "user";
   created_at: string;
 };
@@ -2229,8 +2230,11 @@ function AssignmentsAdmin() {
   const [targetScope, setTargetScope] = useState<"all" | "group" | "user">("group");
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [selectedUser, setSelectedUser] = useState("");
+  const [sourceType, setSourceType] = useState<"file" | "link">("file");
+  const [assignmentLink, setAssignmentLink] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [giveExpanded, setGiveExpanded] = useState(false);
 
   const { data: tasks = [], isLoading: tasksLoading, error: tasksError } = useQuery({
     queryKey: ["admin", "assignment_tasks"],
@@ -2321,6 +2325,8 @@ function AssignmentsAdmin() {
 
   const createAssignment = async () => {
     if (!title.trim()) return toast.error("Assignment title is required.");
+    if (sourceType === "file" && !file) return toast.error("Choose an assignment file.");
+    if (sourceType === "link" && !/^https?:\/\//i.test(assignmentLink.trim())) return toast.error("Enter a valid assignment link starting with http:// or https://.");
     if (targetScope === "group" && selectedGroups.length === 0) return toast.error("Choose at least one group.");
     if (targetScope === "user" && !selectedUser) return toast.error("Choose one student.");
 
@@ -2334,6 +2340,7 @@ function AssignmentsAdmin() {
         description: description.trim(),
         due_date: dueDate ? new Date(dueDate).toISOString() : null,
         target_scope: targetScope,
+        source_type: sourceType,
         created_by: sessionData.session?.user.id ?? null,
       })
       .select("id")
@@ -2344,9 +2351,11 @@ function AssignmentsAdmin() {
     }
 
     try {
-      const uploaded = await uploadAssignmentFile((inserted as any).id);
-      if (uploaded.file_url) {
-        const { error: updateError } = await supabase.from("assignment_tasks" as any).update(uploaded).eq("id", (inserted as any).id);
+      const source = sourceType === "file"
+        ? await uploadAssignmentFile((inserted as any).id)
+        : { file_url: assignmentLink.trim(), file_name: null };
+      if (source.file_url) {
+        const { error: updateError } = await supabase.from("assignment_tasks" as any).update(source).eq("id", (inserted as any).id);
         if (updateError) throw updateError;
       }
       if (targetScope === "group") {
@@ -2374,7 +2383,10 @@ function AssignmentsAdmin() {
     setDueDate("");
     setSelectedGroups([]);
     setSelectedUser("");
+    setSourceType("file");
+    setAssignmentLink("");
     setFile(null);
+    setGiveExpanded(false);
     invalidateAssignments(qc);
   };
 
@@ -2398,12 +2410,20 @@ function AssignmentsAdmin() {
           </CardContent>
         </Card>
       )}
-      <Card>
-        <CardContent className="pt-6 space-y-4">
-          <div>
-            <h3 className="font-serif text-xl font-semibold text-navy-deep">Give Assignment</h3>
-            <p className="text-sm text-muted-foreground">Upload an assignment for all students, selected groups, or one student.</p>
-          </div>
+      <Card className="overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setGiveExpanded((value) => !value)}
+          aria-expanded={giveExpanded}
+          className="flex w-full items-center justify-between gap-3 p-4 text-left transition-colors hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60"
+        >
+          <span>
+            <span className="block font-serif text-xl font-semibold text-navy-deep">Give Assignment</span>
+            <span className="mt-1 block text-sm text-muted-foreground">Create an assignment for students, groups, or everyone.</span>
+          </span>
+          <ChevronDown size={18} className={cn("shrink-0 text-muted-foreground transition-transform", giveExpanded && "rotate-180")} />
+        </button>
+        {giveExpanded && <CardContent className="space-y-4 border-t pt-6">
           <div className="grid gap-3 md:grid-cols-2">
             <div>
               <Label>Title</Label>
@@ -2418,14 +2438,29 @@ function AssignmentsAdmin() {
               <Textarea rows={4} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Write instructions students should follow..." />
             </div>
             <div>
-              <Label>Assignment file</Label>
-              <label className="mt-1 flex min-h-20 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gold/50 bg-gold/5 px-4 py-3 text-center transition-colors hover:border-gold hover:bg-gold/10">
-                <FileUp size={20} className="mb-1 text-gold" />
-                <span className="text-sm font-semibold text-navy-deep">{file ? file.name : "Upload assignment file"}</span>
-                <span className="mt-0.5 text-xs text-muted-foreground">Attach instructions, PDF, document, or supporting file</span>
-                <input type="file" className="sr-only" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-              </label>
+              <Label>Assignment source</Label>
+              <select value={sourceType} onChange={(event) => { setSourceType(event.target.value as "file" | "link"); setFile(null); setAssignmentLink(""); }} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                <option value="file">Upload a file</option>
+                <option value="link">Use an external link</option>
+              </select>
             </div>
+            {sourceType === "file" ? (
+              <div>
+                <Label>Assignment file</Label>
+                <label className="mt-1 flex min-h-20 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gold/50 bg-gold/5 px-4 py-3 text-center transition-colors hover:border-gold hover:bg-gold/10">
+                  <FileUp size={20} className="mb-1 text-gold" />
+                  <span className="text-sm font-semibold text-navy-deep">{file ? file.name : "Upload assignment file"}</span>
+                  <span className="mt-0.5 text-xs text-muted-foreground">PDF, document, presentation, or other assignment file</span>
+                  <input type="file" className="sr-only" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+                </label>
+              </div>
+            ) : (
+              <div>
+                <Label>Assignment link</Label>
+                <Input type="url" value={assignmentLink} onChange={(event) => setAssignmentLink(event.target.value)} placeholder="https://..." />
+                <p className="mt-1 text-xs text-muted-foreground">Students will open this link in a new tab.</p>
+              </div>
+            )}
             <div>
               <Label>Audience</Label>
               <select value={targetScope} onChange={(event) => setTargetScope(event.target.value as any)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
@@ -2468,7 +2503,7 @@ function AssignmentsAdmin() {
           <Button className="bg-gold text-navy-deep hover:bg-gold-soft" disabled={busy} onClick={createAssignment}>
             <FileUp size={16} className="mr-2" />{busy ? "Creating..." : "Publish Assignment"}
           </Button>
-        </CardContent>
+        </CardContent>}
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
@@ -2483,7 +2518,7 @@ function AssignmentsAdmin() {
                     <div>
                       <p className="font-semibold text-navy-deep">{task.title}</p>
                       <p className="text-xs text-muted-foreground">
-                        {task.due_date ? `Due ${formatDate(task.due_date)}` : "No due date"} · {task.target_scope}
+                        {task.due_date ? `Due ${formatDate(task.due_date)}` : "No due date"} · {task.target_scope} · {task.source_type === "link" ? "Link" : "File"}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {assignmentAudienceText(task, groupsByTask, usersByTask, groups, userMap)}

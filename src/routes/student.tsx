@@ -616,6 +616,7 @@ type AssignmentTask = {
   due_date: string | null;
   file_url: string | null;
   file_name: string | null;
+  source_type?: "file" | "link" | null;
   target_scope: string;
   created_at: string;
 };
@@ -880,7 +881,8 @@ function StudentAssignmentsPanel({ userId }: { userId: string }) {
                       {task.file_url && (
                         <Button asChild size="sm" variant="outline" className="mt-3">
                           <a href={task.file_url} target="_blank" rel="noreferrer">
-                            <Download size={14} className="mr-1" />Open assignment file
+                            {task.source_type === "link" ? <ExternalLink size={14} className="mr-1" /> : <Download size={14} className="mr-1" />}
+                            {task.source_type === "link" ? "Open assignment link" : "Open assignment file"}
                           </a>
                         </Button>
                       )}
@@ -958,7 +960,8 @@ function StudentAssignmentSubmitCard({
           {task.file_url && (
             <Button asChild size="sm" variant="outline" className="mt-3">
               <a href={task.file_url} target="_blank" rel="noreferrer">
-                <Download size={14} className="mr-1" />Open assignment file
+                {task.source_type === "link" ? <ExternalLink size={14} className="mr-1" /> : <Download size={14} className="mr-1" />}
+                {task.source_type === "link" ? "Open assignment link" : "Open assignment file"}
               </a>
             </Button>
           )}

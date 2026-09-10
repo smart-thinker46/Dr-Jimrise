@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { BookOpen, Building2, ChevronDown, Eye, EyeOff, GraduationCap, KeyRound, LogOut, Home, Mail, Pencil, User, Users, ExternalLink, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, Building2, CheckCircle2, ChevronDown, ClipboardList, Eye, EyeOff, GraduationCap, KeyRound, LogOut, Home, Mail, MessageSquare, Pencil, User, Users, ExternalLink, type LucideIcon } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -56,6 +56,46 @@ export function DashboardShell({
   const [showPassword, setShowPassword] = useState(false);
   const [profileForm, setProfileForm] = useState<DashboardProfileForm>(emptyProfileForm);
   const [passwordForm, setPasswordForm] = useState({ password: "", confirmPassword: "" });
+  const isAdmin = roleLabel.toLowerCase() === "admin";
+  const [notificationsSeenAt, setNotificationsSeenAt] = useState(0);
+  const { data: adminNotifications = [] } = useQuery({
+    queryKey: ["admin", "header_notifications"],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const [{ data: messages, error: messagesError }, { data: submissions, error: submissionsError }, { data: users }] = await Promise.all([
+        supabase.from("contact_messages" as any).select("id,name,subject,created_at,status").eq("status", "unread").order("created_at", { ascending: false }).limit(8),
+        supabase.from("assignment_submissions" as any).select("id,student_id,file_name,submitted_at,status").eq("status", "submitted").order("submitted_at", { ascending: false }).limit(8),
+        (supabase.rpc as any)("admin_list_users"),
+      ]);
+      if (messagesError) throw messagesError;
+      if (submissionsError) throw submissionsError;
+      const userNames = new Map<string, string>();
+      for (const user of (users ?? []) as Array<{ id: string; email?: string; first_name?: string | null; last_name?: string | null }>) {
+        userNames.set(user.id, [user.first_name, user.last_name].filter(Boolean).join(" ") || user.email || "Student");
+      }
+      return [
+        ...((messages ?? []) as Array<{ id: string; name: string; subject: string; created_at: string }>).map((item) => ({
+          id: `message-${item.id}`,
+          title: item.name || "Student",
+          body: `New message: ${formatNotificationSubject(item.subject)}`,
+          createdAt: item.created_at,
+          icon: "message" as const,
+          target: "messages",
+        })),
+        ...((submissions ?? []) as Array<{ id: string; student_id: string; file_name: string | null; submitted_at: string }>).map((item) => ({
+          id: `submission-${item.id}`,
+          title: userNames.get(item.student_id) ?? "Student",
+          body: "Submitted an assignment for review",
+          createdAt: item.submitted_at,
+          icon: "assignment" as const,
+          target: "assignments",
+        })),
+      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 12);
+    },
+    staleTime: 15_000,
+    retry: 1,
+  });
+  const unreadNotifications = adminNotifications.filter((item) => new Date(item.createdAt).getTime() > notificationsSeenAt).length;
   const [openGroups, setOpenGroups] = useState<string[]>(() =>
     nav.filter((item) => item.children?.some((child) => child.id === active)).map((item) => item.id)
   );
@@ -77,6 +117,32 @@ export function DashboardShell({
       setOpenGroups((groups) => groups.includes(activeGroup.id) ? groups : [...groups, activeGroup.id]);
     }
   }, [active, nav]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const stored = window.localStorage.getItem("admin_notifications_seen_at");
+    setNotificationsSeenAt(stored ? Number(stored) : 0);
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const channel = supabase
+      .channel("admin:header-notifications")
+      .on("postgres_changes", { event: "*", schema: "public", table: "contact_messages" }, () => {
+        void queryClient.invalidateQueries({ queryKey: ["admin", "header_notifications"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "assignment_submissions" }, () => {
+        void queryClient.invalidateQueries({ queryKey: ["admin", "header_notifications"] });
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [isAdmin, queryClient]);
+
+  const markNotificationsSeen = () => {
+    const timestamp = Date.now();
+    window.localStorage.setItem("admin_notifications_seen_at", String(timestamp));
+    setNotificationsSeenAt(timestamp);
+  };
 
   const toggleGroup = (id: string) => {
     setOpenGroups((groups) => groups.includes(id) ? groups.filter((group) => group !== id) : [...groups, id]);
@@ -237,6 +303,63 @@ export function DashboardShell({
                 <p className="text-xs md:text-sm text-muted-foreground truncate">{subtitle}</p>
               )}
             </div>
+            {isAdmin && (
+              <DropdownMenu onOpenChange={(open) => { if (open) markNotificationsSeen(); }}>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Open admin notifications"
+                    title="Notifications"
+                    className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-navy-deep shadow-sm transition-all hover:border-gold/70 hover:bg-gold/10 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-gold/40"
+                  >
+                    <Bell size={18} />
+                    {unreadNotifications > 0 && (
+                      <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-gold px-1.5 py-0.5 text-[10px] font-bold leading-none text-navy-deep">
+                        {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                      </span>
+                    )}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[min(24rem,calc(100vw-2rem))] p-2">
+                  <DropdownMenuLabel className="px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-serif text-base text-navy-deep">Notifications</span>
+                      {unreadNotifications > 0 && <span className="text-xs font-medium text-muted-foreground">{unreadNotifications} new</span>}
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {adminNotifications.length === 0 ? (
+                    <div className="px-3 py-8 text-center">
+                      <CheckCircle2 className="mx-auto mb-2 text-emerald-600" size={24} />
+                      <p className="text-sm font-semibold text-navy-deep">You are all caught up</p>
+                      <p className="mt-1 text-xs text-muted-foreground">New student requests will appear here.</p>
+                    </div>
+                  ) : (
+                    <div className="max-h-96 overflow-y-auto">
+                      {adminNotifications.map((notification) => {
+                        const Icon = notification.icon === "assignment" ? ClipboardList : MessageSquare;
+                        return (
+                          <DropdownMenuItem
+                            key={notification.id}
+                            className="items-start gap-3 rounded-lg px-3 py-3"
+                            onClick={() => onSelect(notification.target)}
+                          >
+                            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gold/15 text-navy-deep">
+                              <Icon size={15} />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-semibold text-navy-deep">{notification.title}</span>
+                              <span className="mt-0.5 block text-xs text-muted-foreground">{notification.body}</span>
+                              <span className="mt-1 block text-[10px] text-muted-foreground">{formatNotificationDate(notification.createdAt)}</span>
+                            </span>
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </div>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -583,6 +706,24 @@ function formatEducationLevel(value: string) {
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+function formatNotificationSubject(value?: string | null) {
+  const labels: Record<string, string> = {
+    student: "Student query",
+    resources: "Resource access request",
+    assignment: "Assignment question",
+    general: "General enquiry",
+    research: "Research collaboration",
+    supervision: "Supervision interest",
+  };
+  return labels[value ?? ""] ?? value ?? "New message";
+}
+
+function formatNotificationDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Just now";
+  return date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
 function getInitials(value: string) {
