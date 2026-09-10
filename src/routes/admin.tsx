@@ -972,6 +972,7 @@ function PublicationEditor({ row, onChange }: { row: any; onChange: () => void }
   };
   const [form, setForm] = useState<any>(initialForm);
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   useEffect(() => setForm({
     ...row,
     article_url: row.article_url ?? row.doi ?? "",
@@ -1022,7 +1023,22 @@ function PublicationEditor({ row, onChange }: { row: any; onChange: () => void }
   };
 
   return (
-    <div className="border rounded-lg p-4 bg-background space-y-4">
+    <div className="overflow-hidden rounded-lg border bg-background">
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-3 p-4 text-left transition-colors hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60"
+      >
+        <span className="min-w-0">
+          <span className="block truncate font-semibold text-navy-deep">{row.title || "Untitled publication"}</span>
+          <span className="mt-1 block truncate text-sm text-muted-foreground">
+            {row.kind === "conference" ? "Conference presentation" : "Journal article"}{row.venue ? ` · ${row.venue}` : ""}{row.year ? ` · ${row.year}` : ""}
+          </span>
+        </span>
+        <ChevronDown size={18} className={cn("shrink-0 text-muted-foreground transition-transform", expanded && "rotate-180")} />
+      </button>
+      {expanded && <div className="space-y-4 border-t p-4">
       <div className="grid md:grid-cols-2 gap-3">
         <div>
           <Label className="text-xs">Type</Label>
@@ -1106,6 +1122,7 @@ function PublicationEditor({ row, onChange }: { row: any; onChange: () => void }
           <Button size="sm" variant="destructive" disabled={busy}><Trash2 size={14} className="mr-1" />Delete</Button>
         </ConfirmAction>
       </div>
+      </div>}
     </div>
   );
 }
@@ -1387,6 +1404,7 @@ function AcademicContentEditor({ section }: { section: AcademicSection }) {
   });
   const [value, setValue] = useState<any>(section.fallback);
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     if (data !== undefined) setValue(data);
@@ -1408,24 +1426,32 @@ function AcademicContentEditor({ section }: { section: AcademicSection }) {
   const resetToFallback = () => setValue(section.fallback);
 
   return (
-    <Card>
-      <CardContent className="pt-6 space-y-3">
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-          <div>
-            <h4 className="font-serif text-lg font-semibold text-navy-deep">{section.title}</h4>
-            <p className="text-sm text-muted-foreground">{section.description}</p>
-          </div>
-          <div className="flex gap-2">
+    <Card className="overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-3 p-4 text-left transition-colors hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60"
+      >
+        <span className="min-w-0">
+          <span className="block truncate font-serif text-lg font-semibold text-navy-deep">{section.title}</span>
+          <span className="mt-1 block truncate text-sm text-muted-foreground">{section.description}</span>
+        </span>
+        <ChevronDown size={18} className={cn("shrink-0 text-muted-foreground transition-transform", expanded && "rotate-180")} />
+      </button>
+      {expanded && (
+        <CardContent className="space-y-3 border-t pt-6">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button type="button" variant="outline" size="sm" onClick={resetToFallback}>Reset Sample</Button>
             <Button type="button" size="sm" disabled={busy || isLoading} onClick={save} className="bg-navy-deep hover:bg-navy text-cream">
               <Save size={14} className="mr-1" />{busy ? "Saving..." : "Save"}
             </Button>
           </div>
-        </div>
-        {isLoading ? <p className="text-sm text-muted-foreground">Loading...</p> : (
-          <AcademicFields section={section} value={value} onChange={setValue} />
-        )}
-      </CardContent>
+          {isLoading ? <p className="text-sm text-muted-foreground">Loading...</p> : (
+            <AcademicFields section={section} value={value} onChange={setValue} />
+          )}
+        </CardContent>
+      )}
     </Card>
   );
 }
